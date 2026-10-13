@@ -104,3 +104,8 @@ Animation playback is 25% faster: 22 frames now total 796ms instead of 995ms. Pl
 The original statistics desk is anchored lower in the gameplay area and stays visible on every active-run screen, including results, company news, boosters, shop, pause and inspection. Controls are positioned above the desk. The fullscreen compatibility changes from v5.1 are included.
 
 Validation: Release build with no warnings; all 4471 checks passed, including selected-card flight, animation cleanup, enlarged redraw region, persistent statistics and the full campaign suite. Text-frame previews inspected at 108x40 and 120x42.
+
+## Centered card animation (v5.3)
+Played decision, event and booster cards slide horizontally to the middle of the table first. The chosen card stays intact there for 1.5 seconds while the unchosen cards collapse, then performs the existing faster curving animation into a dot three rows above its centered top edge. Cards already in the middle do not incur a movement delay. The statistics desk remains visible throughout. Rerolls and skips retain their faster discard animation.
+
+Validation: Release build without warnings and 4607 passing checks, including all three starting card positions, exact pause timing, original card text at the centered position, animation cleanup and the full campaign suite.

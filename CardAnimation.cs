@@ -1,6 +1,6 @@
 namespace TranslateUni;
 
-public enum AnimationStage { Horizontal, Vertical, Star }
+public enum AnimationStage { MoveToCenter, Hold, Horizontal, Vertical, Suction, Star }
 public sealed record AnimationFrame(Canvas Canvas, int Delay, AnimationStage Stage, int CardWidth, int CardHeight)
 {
     public IReadOnlyList<HitBox> Areas { get; init; } = [];
@@ -17,6 +17,12 @@ public static class CardAnimation
         HitBox? chosen = cards.FirstOrDefault(b => b.Index == selectedIndex);
         HitBox[] collapsing = cards.Where(b => b.Index != selectedIndex).ToArray();
         HitBox[] areas = cards.Select(b => b == chosen ? b with { Y = Math.Max(0, b.Y - 4), Height = b.Height + Math.Min(4, b.Y) } : b).ToArray();
+        HitBox? centered = chosen == null ? null : chosen with { X = (cards.Min(b => b.X) + cards.Max(b => b.X + b.Width) - chosen.Width) / 2 };
+        if (chosen != null && centered != null)
+        {
+            int left = Math.Min(chosen.X, centered.X), right = Math.Max(chosen.X + chosen.Width, centered.X + centered.Width);
+            areas = areas.Append(new HitBox(left, Math.Max(0, chosen.Y - 4), right - left, chosen.Height + Math.Min(4, chosen.Y), "animation")).ToArray();
+        }
         var result = new List<AnimationFrame>();
         string[] lines = source.Lines();
         Canvas clean()
@@ -25,6 +31,19 @@ public static class CardAnimation
             foreach (HitBox card in cards) for (int row = 0; row < card.Height; row++)
                 frame.Text(card.X, card.Y + row, new string(' ', card.Width));
             return frame;
+        }
+        if (chosen != null && centered != null)
+        {
+            for (int step = 1; step <= 8; step++)
+            {
+                double progress = step / 8.0;
+                double eased = progress * progress * (3 - 2 * progress);
+                var drawing = new Canvas(source.Width, source.Height); drawing.Paste(source, 0, 0);
+                for (int row = 0; row < chosen.Height; row++) drawing.Text(chosen.X, chosen.Y + row, new string(' ', chosen.Width));
+                int x = (int)Math.Round(chosen.X + (centered.X - chosen.X) * eased);
+                DrawCopy(drawing, source, chosen, x, chosen.Y);
+                result.Add(new(drawing, chosen.X == centered.X || step == 8 ? 0 : 25, AnimationStage.MoveToCenter, chosen.Width, chosen.Height) { Areas = areas });
+            }
         }
         for (int frame = 0; frame < 12; frame++)
         {
@@ -42,7 +61,7 @@ public static class CardAnimation
                     drawing.Text(x + 1, card.Y + row, text[..Math.Max(0, visible)]);
                 }
             }
-            if (chosen != null) DrawSuction(drawing, source, chosen, (frame + 1) / 17.0);
+            if (chosen != null && centered != null) DrawCopy(drawing, source, chosen, centered.X, centered.Y);
             result.Add(new(drawing, 28, AnimationStage.Horizontal, width, 15) { Areas = areas });
         }
         for (int frame = 0; frame < 5; frame++)
@@ -55,7 +74,7 @@ public static class CardAnimation
                 if (height == 1) drawing.Text(x, y, "+---+", ConsoleColor.Yellow);
                 else drawing.Box(x, y, 5, height, ConsoleColor.Yellow);
             }
-            if (chosen != null) DrawSuction(drawing, source, chosen, (frame + 13) / 17.0);
+            if (chosen != null && centered != null) DrawCopy(drawing, source, chosen, centered.X, centered.Y);
             result.Add(new(drawing, 36, AnimationStage.Vertical, 5, height) { Areas = areas });
         }
         for (int frame = 0; frame < 5; frame++)
@@ -77,12 +96,37 @@ public static class CardAnimation
                     drawing.Text(x - 2, y, ".   ."); drawing.Text(x, y - 1, "."); drawing.Text(x, y + 1, ".");
                 }
             }
-            if (chosen != null) DrawBurst(drawing, chosen.X + chosen.Width / 2, Math.Max(1, chosen.Y - 3), frame);
+            if (chosen != null && centered != null) DrawCopy(drawing, source, chosen, centered.X, centered.Y);
             result.Add(new(drawing, 56, AnimationStage.Star, 0, 0) { Areas = areas });
+        }
+        if (chosen != null && centered != null)
+        {
+            Canvas held = clean(); DrawCopy(held, source, chosen, centered.X, centered.Y);
+            // The 796ms discard animation already counts toward the 1.5-second pause.
+            result.Add(new(held, 1500 - 796, AnimationStage.Hold, chosen.Width, chosen.Height) { Areas = areas });
+            for (int step = 1; step <= 17; step++)
+            {
+                Canvas drawing = clean();
+                DrawSuction(drawing, source, centered, step / 17.0, chosen);
+                result.Add(new(drawing, step <= 12 ? 28 : 36, AnimationStage.Suction, 0, 0) { Areas = areas });
+            }
+            for (int step = 0; step < 5; step++)
+            {
+                Canvas drawing = clean();
+                DrawBurst(drawing, centered.X + centered.Width / 2, Math.Max(1, centered.Y - 3), step);
+                result.Add(new(drawing, 56, AnimationStage.Star, 0, 0) { Areas = areas });
+            }
         }
         return result;
     }
-    static void DrawSuction(Canvas drawing, Canvas source, HitBox card, double progress)
+    static void DrawCopy(Canvas drawing, Canvas source, HitBox card, int left, int top)
+    {
+        string[] lines = source.Lines();
+        for (int y = 0; y < card.Height; y++)
+        for (int x = 0; x < card.Width; x++)
+            drawing.Text(left + x, top + y, lines[card.Y + y][card.X + x].ToString(), source.ColorAt(card.X + x, card.Y + y));
+    }
+    static void DrawSuction(Canvas drawing, Canvas source, HitBox card, double progress, HitBox original)
     {
         int center = card.X + card.Width / 2, target = Math.Max(1, card.Y - 3);
         double pull = 1 - Math.Pow(1 - progress, 1.5);
@@ -102,10 +146,10 @@ public static class CardAnimation
             else
             {
                 drawing.Text(left, y, "/" + new string(' ', width - 2) + "\\", ConsoleColor.Yellow);
-                int row = card.Y + Math.Clamp((int)Math.Round(fraction * (card.Height - 1)), 1, card.Height - 2);
-                string text = lines[row].Substring(card.X + 1, card.Width - 2).Trim();
+                int row = original.Y + Math.Clamp((int)Math.Round(fraction * (card.Height - 1)), 1, card.Height - 2);
+                string text = lines[row].Substring(original.X + 1, original.Width - 2).Trim();
                 int visible = Math.Min(width - 2, (int)Math.Round(text.Length * (1 - progress)));
-                drawing.Text(center - visible / 2, y, text[..Math.Max(0, visible)], source.ColorAt(card.X + 2, row));
+                drawing.Text(center - visible / 2, y, text[..Math.Max(0, visible)], source.ColorAt(original.X + 2, row));
             }
         }
         drawing.Text(center, target, ".", ConsoleColor.Yellow);

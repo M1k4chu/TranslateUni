@@ -164,22 +164,32 @@ public static class Verification
             Check(frames[^1].Canvas.Lines().Skip(card.Y).Take(card.Height).All(line => line.Substring(card.X, card.Width).Trim().Length == 0),
                 "animation clears all traces of the card");
             Check(frames.All(f => f.Canvas.Lines()[1] == source.Lines()[1]), "animation preserves the rest of the screen");
-            List<AnimationFrame> suction = CardAnimation.Build(source, 0);
-            int dotY = card.Y - 3, center = card.X + card.Width / 2;
-            Check(suction[16].Canvas.Lines()[dotY][center] == '.', "selected card reaches dot three rows above its top");
-            Check(suction[17].Canvas.Lines()[dotY][center] == '*', "selected star burst occurs at suction dot");
-            Check(suction[17].Canvas.Lines()[card.Y + card.Height / 2][center] == ' ', "selected card does not collapse at its old center");
-            Check(suction[^1].Canvas.Lines().Skip(card.Y).Take(card.Height).All(line => line.Substring(card.X, card.Width).Trim().Length == 0), "suction leaves no card ghost");
-            HitBox other = source.Buttons.First(b => b.Action == "select" && b.Index != 0);
-            Check(suction[17].Canvas.Lines()[other.Y + other.Height / 2][other.X + other.Width / 2] == '*', "only unselected cards collapse at their centers");
-            Check(suction.All(f => f.Areas.Any(a => a.Y <= dotY - 1 && a.X == card.X)), "redraw includes the upper flight path and star");
-            int deskY = source.Lines().Select((line, y) => (line, y)).First(pair => pair.line.Contains(new string('_', 48))).y;
-            Check(suction.All(f => f.Canvas.Lines()[deskY + 2] == source.Lines()[deskY + 2]), "desk stays visible throughout animation");
+            foreach (HitBox chosen in source.Buttons.Where(b => b.Action == "select"))
+            {
+                List<AnimationFrame> suction = CardAnimation.Build(source, chosen.Index);
+                HitBox[] cards = source.Buttons.Where(b => b.Action == "select").ToArray();
+                int centeredX = (cards.Min(b => b.X) + cards.Max(b => b.X + b.Width) - chosen.Width) / 2;
+                int dotY = chosen.Y - 3, center = centeredX + chosen.Width / 2;
+                Check(suction.Count == 53 && suction.Take(8).All(f => f.Stage == AnimationStage.MoveToCenter), "selected card moves to center first");
+                Check(suction.Skip(8).Take(23).Sum(f => f.Delay) == 1500 && suction[30].Stage == AnimationStage.Hold, "card waits exactly 1.5 seconds after moving");
+                for (int row = 0; row < chosen.Height; row++)
+                    Check(suction[30].Canvas.Lines()[chosen.Y + row].Substring(centeredX, chosen.Width) == source.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width), "centered card retains original text while waiting");
+                Check(suction[31].Stage == AnimationStage.Suction && suction[47].Canvas.Lines()[dotY][center] == '.', "curving begins after pause and ends at centered dot");
+                Check(suction[48].Canvas.Lines()[dotY][center] == '*', "selected star burst occurs above the middle");
+                Check(suction[48].Canvas.Lines()[chosen.Y + chosen.Height / 2][center] == ' ', "selected card does not collapse at its old center");
+                Check(suction[^1].Canvas.Lines().Skip(chosen.Y).Take(chosen.Height).All(line => line.Substring(chosen.X, chosen.Width).Trim().Length == 0), "suction leaves no card ghost at original position");
+                Check(suction[^1].Canvas.Lines().Skip(chosen.Y).Take(chosen.Height).All(line => line.Substring(centeredX, chosen.Width).Trim().Length == 0), "suction leaves no card ghost in middle");
+                HitBox other = cards.First(b => b.Index != chosen.Index);
+                Check(suction[25].Canvas.Lines()[other.Y + other.Height / 2][other.X + other.Width / 2] == '*' || other.X == centeredX, "unchosen cards collapse while selected card waits");
+                Check(suction.All(f => f.Areas.Any(a => a.Y <= dotY - 1 && a.X <= centeredX && a.X + a.Width >= centeredX + chosen.Width)), "redraw includes slide and centered flight path");
+                int deskY = source.Lines().Select((line, y) => (line, y)).First(pair => pair.line.Contains(new string('_', 48))).y;
+                Check(suction.All(f => f.Canvas.Lines()[deskY + 2] == source.Lines()[deskY + 2]), "desk stays visible throughout animation");
+            }
         }
         Key(app, ConsoleKey.I); Check(app.Screen == Screen.Inspect, "full card explanation");
         Key(app, ConsoleKey.Escape); Check(app.Screen == Screen.Table, "inspection preserves selection");
         Key(app, ConsoleKey.Enter); Check(app.TutorialStep == 2, "tutorial advances after actual card play");
-        Check(app.TakeAnimationFrames().Count == 22 && app.TakeAnimationFrames().Count == 0, "successful card action queues one animation");
+        Check(app.TakeAnimationFrames().Count == 53 && app.TakeAnimationFrames().Count == 0, "successful card action queues one animation");
         Key(app, ConsoleKey.R); Check(app.TutorialStep == 3 && app.Game.Rerolls == 0, "tutorial teaches actual reroll");
         Key(app, ConsoleKey.E); Key(app, ConsoleKey.E); Key(app, ConsoleKey.Enter);
         Check(app.Screen == Screen.SpecialEvent, "tutorial shows company news");
@@ -413,7 +423,7 @@ public static class Verification
         }
         capture("01-main"); Key(app, ConsoleKey.T); capture("02-learning-guide"); Key(app, ConsoleKey.Enter); capture("02-tutorial-intro"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("03-cards-and-desk");
         var flight = CardAnimation.Build(app.Render(120, 42), 0);
-        foreach (int i in new[] { 0, 7, 12, 16, 19, 21 })
+        foreach (int i in new[] { 0, 7, 15, 30, 38, 47, 50, 52 })
             File.WriteAllLines(Path.Combine(directory, $"03-flight-{i:00}.txt"), flight[i].Canvas.Lines());
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.R); Key(app, ConsoleKey.E); capture("04-events"); Key(app, ConsoleKey.E); capture("05-report");
         Key(app, ConsoleKey.Enter); capture("06-company-news"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("07-boosters");
