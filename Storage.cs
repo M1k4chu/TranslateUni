@@ -3,7 +3,11 @@ using System.Text.Json;
 namespace BusinessGame;
 
 public sealed record RunRecord(string Course, string Topic, Difficulty Difficulty, int Cleared, bool Won, double Profit, DateTimeOffset Finished);
-public sealed class Preferences { public Difficulty Difficulty { get; set; } = Difficulty.Normal; }
+public sealed class Preferences
+{
+    public Difficulty Difficulty { get; set; } = Difficulty.Normal;
+    public bool TutorialCompleted { get; set; }
+}
 public sealed class Storage
 {
     readonly string directory;

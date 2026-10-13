@@ -20,12 +20,12 @@ public static class Program
             Console.Clear();
             while (!app.Quit)
             {
-                int width = Math.Min(120, Console.WindowWidth), height = Math.Min(38, Console.WindowHeight);
+                int width = Math.Min(140, Console.WindowWidth), height = Math.Min(46, Console.WindowHeight);
                 Canvas frame = app.Render(width, height);
                 try { frame.Flush(); }
                 catch (ArgumentOutOfRangeException) { continue; } // The window was resized during drawing.
                 Input next = input.Read();
-                if (width < 80 || height < 30)
+                if (width < 108 || height < 40)
                 {
                     if (next.Key is ConsoleKey.Escape or ConsoleKey.Q) app.Exit();
                     continue;
@@ -43,8 +43,8 @@ public static class Program
         if (!OperatingSystem.IsWindows()) return;
         try
         {
-            int width = Math.Max(Console.WindowWidth, Math.Min(100, Console.LargestWindowWidth));
-            int height = Math.Max(Console.WindowHeight, Math.Min(34, Console.LargestWindowHeight));
+            int width = Math.Max(Console.WindowWidth, Math.Min(120, Console.LargestWindowWidth));
+            int height = Math.Max(Console.WindowHeight, Math.Min(42, Console.LargestWindowHeight));
             if (Console.BufferWidth < width || Console.BufferHeight < height)
                 Console.SetBufferSize(Math.Max(Console.BufferWidth, width), Math.Max(Console.BufferHeight, height));
             Console.SetWindowSize(width, height);
@@ -53,9 +53,9 @@ public static class Program
     }
 }
 
-public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing }
+public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, SpecialEvent, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing, Inspect, TutorialIntro, TutorialComplete }
 
-public sealed class GameApp
+public sealed partial class GameApp
 {
     public Screen Screen { get; private set; } = Screen.Main;
     public Run? Game { get; private set; }
@@ -66,7 +66,7 @@ public sealed class GameApp
     bool browsing, recorded;
     string notice = "";
     Screen beforePause;
-    static readonly string[] Menu = ["Student / Team - PLAY", "Quick Demo - FreshFizz", "Course Library", "Previous Results", "Settings", "Lecturer / Learning Guide", "Product Analytics", "Exit"];
+    static readonly string[] Menu = ["Student / Team - PLAY", "Quick Demo - FreshFizz", "Course Library", "Previous Results", "Settings", "Tutorial - 2 minutes", "Product Analytics", "Exit"];
 
     public GameApp(List<Course> courses, Storage storage)
     { this.courses = courses; this.storage = storage; difficultyIndex = (int)storage.Preferences.Difficulty; }
@@ -74,11 +74,12 @@ public sealed class GameApp
 
     public Canvas Render(int width, int height)
     {
-        var c = new Canvas(width, height);
-        if (width < 80 || height < 30)
+        var c = new Canvas(Game == null ? width : width - 30, height);
+        if (width < 108 || height < 40)
         {
-            c.Center(Math.Max(0, height / 2 - 1), "Please resize this terminal to at least 80 x 30.", ConsoleColor.Yellow);
-            c.Center(Math.Max(1, height / 2 + 1), "ESC: Exit | Recommended: 100 x 34");
+            c = new Canvas(width, height);
+            c.Center(Math.Max(0, height / 2 - 1), "Please resize this terminal to at least 108 x 40.", ConsoleColor.Yellow);
+            c.Center(Math.Max(1, height / 2 + 1), "ESC: Exit | Recommended: 120 x 42");
             return c;
         }
         switch (Screen)
@@ -90,6 +91,7 @@ public sealed class GameApp
             case Screen.Table: DrawTable(c, false); break;
             case Screen.Events: DrawTable(c, true); break;
             case Screen.Result: DrawResult(c); break;
+            case Screen.SpecialEvent: DrawCompanyEvent(c); break;
             case Screen.Booster: DrawBooster(c); break;
             case Screen.Shop: DrawShop(c); break;
             case Screen.Reward: DrawReward(c); break;
@@ -100,10 +102,18 @@ public sealed class GameApp
             case Screen.Guide: DrawGuide(c); break;
             case Screen.Analytics: DrawAnalytics(c); break;
             case Screen.Briefing: DrawBriefing(c); break;
+            case Screen.Inspect: DrawInspect(c); break;
+            case Screen.TutorialIntro: DrawTutorialIntro(c); break;
+            case Screen.TutorialComplete: DrawTutorialComplete(c); break;
         }
         if (notice.Length > 0) c.Text(3, height - 3, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
         else if (storage.Notice.Length > 0) c.Text(3, height - 3, storage.Notice, ConsoleColor.Yellow);
-        return c;
+        if (Game == null) return c;
+        DrawTutorialHint(c);
+        var combined = new Canvas(width, height);
+        combined.Paste(c, 0, 0);
+        combined.Paste(DrawSidebar(height), width - 30, 0);
+        return combined;
     }
     public void Handle(Input input, Canvas frame)
     {
@@ -117,6 +127,17 @@ public sealed class GameApp
         ConsoleKey key = input.Key;
         if (key == ConsoleKey.NoName) return;
         if (key == ConsoleKey.Escape) { Back(); return; }
+        if (Game != null && key is ConsoleKey.PageUp or ConsoleKey.PageDown)
+        { ScrollBoosters(key == ConsoleKey.PageUp ? -1 : 1); return; }
+        if (key == ConsoleKey.I) { InspectSelected(); return; }
+        if (Screen == Screen.Inspect)
+        { if (key == ConsoleKey.Enter) Screen = beforeInspect; return; }
+        if (Screen == Screen.TutorialIntro)
+        { if (key == ConsoleKey.Enter) Activate("tutorialBegin"); return; }
+        if (Screen == Screen.TutorialComplete)
+        { if (key == ConsoleKey.Enter) Activate("tutorialFinish"); return; }
+        if (Screen == Screen.Main && key == ConsoleKey.T) { StartTutorial(); return; }
+        if (Screen == Screen.Main && key == ConsoleKey.G) { Screen = Screen.Guide; return; }
         int digit = Digit(key);
         if (Screen == Screen.Main)
         {
@@ -173,6 +194,7 @@ public sealed class GameApp
             return;
         }
         if (Screen == Screen.Result && key == ConsoleKey.Enter) Activate("continue");
+        else if (Screen == Screen.SpecialEvent && key == ConsoleKey.Enter) Activate("companyContinue");
         else if (Screen == Screen.End)
         { if (key == ConsoleKey.R) StartRun(); else if (key == ConsoleKey.Enter) ReturnMain(); }
         else if (Screen == Screen.Pause)
@@ -187,6 +209,8 @@ public sealed class GameApp
     }
     void Activate(string action, int index = -1)
     {
+        if (!TutorialAllows(action, index)) { notice = TutorialInstruction; return; }
+        Phase? phaseBefore = Game?.Phase;
         switch (action)
         {
             case "menu":
@@ -198,7 +222,7 @@ public sealed class GameApp
                     case 2: browsing = true; Screen = Screen.Courses; break;
                     case 3: Screen = Screen.History; break;
                     case 4: Screen = Screen.Settings; break;
-                    case 5: Screen = Screen.Guide; break;
+                    case 5: StartTutorial(); break;
                     case 6: Screen = Screen.Analytics; break;
                     case 7: Quit = true; break;
                 }
@@ -228,6 +252,7 @@ public sealed class GameApp
                 else if (Game.Phase == Phase.Booster) Game.SkipBooster();
                 selected = -1; SyncScreen(); break;
             case "continue": Game?.ContinueResult(); SyncScreen(); break;
+            case "companyContinue": Game?.AcknowledgeCompanyEvent(); SyncScreen(); break;
             case "buy": Game?.Buy(index); break;
             case "shopSelect": shopIndex = index; break;
             case "lockedShop": notice = "The shop opens after clearing the month and choosing a booster."; break;
@@ -240,10 +265,19 @@ public sealed class GameApp
             case "back": Back(); break;
             case "briefingPlay": browsing = false; Screen = Screen.Difficulty; break;
             case "settingDifficulty": storage.Preferences.Difficulty = (Difficulty)index; difficultyIndex = index; storage.SaveSettings(); break;
+            case "activeInspect": InspectActive(index); break;
+            case "scrollUp": ScrollBoosters(-1); break;
+            case "scrollDown": ScrollBoosters(1); break;
+            case "inspect": InspectSelected(); break;
+            case "inspectBack": Screen = beforeInspect; break;
+            case "tutorialBegin": tutorialStep = 1; Screen = Screen.Table; break;
+            case "tutorialFinish": storage.Preferences.TutorialCompleted = true; storage.SaveSettings(); ReturnMain(); break;
         }
+        ObserveTutorial(action, phaseBefore);
     }
     void StartRun()
     {
+        tutorialStep = -1; boosterScroll = 0;
         Game = new Run(courses[courseIndex], topicIndex, (Difficulty)difficultyIndex, Random.Shared.Next());
         selected = -1; shopIndex = 0; recorded = false; SyncScreen();
     }
@@ -251,15 +285,17 @@ public sealed class GameApp
     {
         if (Game == null) return;
         Screen = Game.Phase switch { Phase.Decisions => Screen.Table, Phase.Events => Screen.Events,
-            Phase.Result => Screen.Result, Phase.Booster => Screen.Booster, Phase.Shop => Screen.Shop,
+            Phase.Result => Screen.Result, Phase.SpecialEvent => Screen.SpecialEvent, Phase.Booster => Screen.Booster, Phase.Shop => Screen.Shop,
             _ => Screen.End };
-        if (Game.Phase is Phase.Won or Phase.Lost && !recorded)
+        if (Game.Phase is Phase.Won or Phase.Lost && !recorded && !Game.Tutorial)
         { storage.Record(Game); recorded = true; }
     }
     void Back()
     {
         switch (Screen)
         {
+            case Screen.Inspect: Screen = beforeInspect; break;
+            case Screen.TutorialIntro: case Screen.TutorialComplete: ReturnMain(); break;
             case Screen.Main: Quit = true; break;
             case Screen.Courses: ReturnMain(); break;
             case Screen.Topics: Screen = Screen.Courses; break;
@@ -268,12 +304,12 @@ public sealed class GameApp
             case Screen.Shop: Screen = Screen.Reward; break;
             case Screen.Pause: Screen = beforePause; break;
             case Screen.End: ReturnMain(); break;
-            case Screen.Table: case Screen.Events: case Screen.Result: case Screen.Booster: case Screen.Reward:
+            case Screen.Table: case Screen.Events: case Screen.Result: case Screen.SpecialEvent: case Screen.Booster: case Screen.Reward:
                 beforePause = Screen; Screen = Screen.Pause; break;
             default: ReturnMain(); break;
         }
     }
-    void ReturnMain() { Game = null; Screen = Screen.Main; notice = ""; }
+    void ReturnMain() { Game = null; Screen = Screen.Main; notice = ""; tutorialStep = -1; }
     static int Digit(ConsoleKey key) => key is >= ConsoleKey.D1 and <= ConsoleKey.D9 ? key - ConsoleKey.D1
         : key is >= ConsoleKey.NumPad1 and <= ConsoleKey.NumPad9 ? key - ConsoleKey.NumPad1
         : key is ConsoleKey.D0 or ConsoleKey.NumPad0 ? 9 : -1;
@@ -298,7 +334,7 @@ public sealed class GameApp
         c.Center(1, ".------------------------------------------------------.", ConsoleColor.DarkCyan);
         c.Center(2, "|              B U S I N E S S G A M E                 |", ConsoleColor.Cyan);
         c.Center(3, "'------------------------------------------------------'", ConsoleColor.DarkCyan);
-        c.Center(5, "THE ECONFORGE EDITION", ConsoleColor.Yellow);
+        c.Center(5, "THE ECONFORGE EDITION - V3", ConsoleColor.Yellow);
         c.Center(6, "One company. Twelve months. Every decision counts.");
         for (int i = 0; i < Menu.Length; i++) c.Button(6, 9 + i * 2, (i + 1) + ". " + Menu[i], "menu", i, i == menuIndex);
         int x = c.Width - 29;
@@ -308,7 +344,8 @@ public sealed class GameApp
         c.Text(x + 3, 16, "12 MONTH QUOTAS", ConsoleColor.White);
         c.Text(x + 3, 18, "60 TOPIC DECKS", ConsoleColor.Cyan);
         c.Text(x + 3, 19, "3 DIFFICULTY CHIPS", ConsoleColor.Red);
-        Footer(c, "Arrows: Navigate | ENTER: Choose | 1-8 / mouse: Open | ESC: Exit");
+        c.Center(27, "New here? T: hands-on 2-minute tutorial | G: full controls", ConsoleColor.Green);
+        Footer(c, "Arrows: Navigate | ENTER: Choose | 1-8 / mouse: Open | T: Tutorial | ESC: Exit");
     }
     void DrawCourses(Canvas c)
     {
@@ -354,7 +391,7 @@ public sealed class GameApp
             c.Text(x + 3, y + 3, "  \\ \\    // /", color);
             c.Text(x + 3, y + 4, "   '--------'", color);
             c.Text(x + 2, y + 6, i == 2 ? "2 decisions/month" : "3 decisions/month");
-            c.Text(x + 2, y + 7, $"{(i == 0 ? 4 : i == 1 ? 3 : 2)} rerolls/month");
+            c.Text(x + 2, y + 7, "1 starting reroll/month");
             c.Text(x + 2, y + 8, i == 0 ? "Lower profit quotas" : i == 1 ? "Standard quotas" : "Tighter quotas");
             c.Buttons.Add(new(x, y, 22, 10, "difficulty", i));
         }
@@ -367,39 +404,52 @@ public sealed class GameApp
         Header(c, events ? "EVENT PHASE - TAKE IT OR LEAVE IT" : "DECISION TABLE", $"{g.Course.Name} / {g.Lesson.Name}");
         c.Text(3, 4, $"MONTH {g.Month}/12   Quotas met: {g.Cleared}/12   {g.Difficulty}", ConsoleColor.Yellow);
         c.Text(3, 5, $"Decisions left: {g.Actions}   Rerolls: {g.Rerolls}   Projected profit: ${forecast.Profit:N0}");
-        string quotas = string.Join(" | ", g.Quotas().Select(q => $"{q.Name} {(q.AtLeast ? ">=" : "<=")} {Metric(q.Name, q.Target)}"));
-        c.Wrapped(3, 6, "MONTH QUOTAS: " + quotas, c.Width - 6, 2, ConsoleColor.Cyan);
+        c.Text(3, 6, "Quota + last earnings on the right. I: card details.", ConsoleColor.Cyan);
         for (int i = 0; i < 3; i++)
         {
             string name = events ? g.Events[i].Name : g.Hand[i].Name;
-            string[] lines = events ? Wrap(g.Events[i].Description, 19).Take(6).ToArray() : g.Describe(g.Hand[i].Kind);
-            DrawCard(c, i, name, lines, i == selected, events ? ConsoleColor.Magenta : ConsoleColor.Cyan);
+            string[] lines = events ? [g.Events[i].Description] : g.Describe(g.Hand[i].Kind);
+            string flavor = events ? GameContent.Flavor(g.Events[i]) : GameContent.Flavor(g.Hand[i].Kind);
+            Rarity rarity = events ? g.Events[i].Rarity : g.Hand[i].Rarity;
+            DrawCard(c, i, name, flavor, lines, rarity, i == selected, events ? ConsoleColor.Magenta : ConsoleColor.Cyan);
         }
         DrawStats(c);
-        c.Button(3, 25, $"R {g.Rerolls}", "reroll");
-        c.Button(c.Width - 10, 25, "S", "lockedShop");
-        c.Button(15, 25, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
-        c.Button(15, 26, events ? "ENTER TAKE" : "ENTER PLAY", "play");
+        c.Button(3, 30, $"R {g.Rerolls}", "reroll");
+        c.Button(c.Width - 10, 30, "S", "lockedShop");
+        c.Button(3, 35, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
+        c.Button(28, 35, events ? "ENTER TAKE" : "ENTER PLAY", "play");
         c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
-        Footer(c, "Arrows/1-3: Select | SPACE: Clear | ENTER: Play | R: Reroll | ESC: Pause");
+        Footer(c, "1-3: Select | ENTER: Play | E: Skip | I: Details | ESC: Pause");
     }
-    void DrawCard(Canvas c, int index, string title, string[] lines, bool raised, ConsoleColor color)
+    void DrawCard(Canvas c, int index, string title, string flavor, string[] lines, Rarity rarity, bool raised, ConsoleColor color)
     {
         int x = Math.Max(3, (c.Width - 72) / 2) + index * 24;
-        int y = raised ? 8 : 10; // Balatro-style selection lift: exactly two rows.
-        c.Box(x, y, 22, 11, raised ? ConsoleColor.Yellow : color);
-        c.Text(x + 2, y + 1, (index + 1) + ".", ConsoleColor.White);
-        c.Wrapped(x + 2, y + 2, title, 18, 2, raised ? ConsoleColor.Yellow : ConsoleColor.White);
-        for (int row = 0; row < Math.Min(6, lines.Length); row++) c.Text(x + 2, y + 4 + row, lines[row].Length > 18 ? lines[row][..18] : lines[row]);
-        c.Buttons.Add(new(x, y, 22, 11, "select", index));
+        int y = raised ? 10 : 12; // Balatro-style selection lift: exactly two rows.
+        c.Box(x, y, 22, 15, raised ? ConsoleColor.Yellow : color);
+        c.Wrapped(x + 2, y + 1, (index + 1) + ". " + title, 18, 2, raised ? ConsoleColor.Yellow : ConsoleColor.White);
+        c.Text(x + 2, y + 3, rarity.ToString().ToUpper(), GameContent.Color(rarity));
+        c.Wrapped(x + 2, y + 4, flavor, 18, 2, ConsoleColor.Yellow);
+        c.Text(x + 2, y + 6, "------------------", ConsoleColor.DarkGray);
+        string[] definition = lines.SelectMany(line => Wrap(line, 18)).ToArray();
+        for (int row = 0; row < Math.Min(6, definition.Length); row++) c.Text(x + 2, y + 7 + row, definition[row]);
+        if (definition.Length > 6) c.Text(x + 2, y + 13, "I: full definition", ConsoleColor.Cyan);
+        c.Buttons.Add(new(x, y, 22, 15, "select", index));
     }
     void DrawStats(Canvas c)
     {
         Run g = Game!;
-        c.Rule(21);
-        c.Text(3, 22, $"CASH ${g.Cash:N0}  |  DEBT ${g.Debt:N0}  |  STOCK {g.Inventory}  |  CAPACITY {g.Capacity}");
-        c.Text(3, 23, $"PRICE ${g.Price:F2} | UNIT COST ${g.UnitCost:F2} | SHARE {g.Share:F1}% | QUALITY {g.Quality:F0}");
-        c.Text(3, 24, $"SERVICE {g.Preview().Service:F0}% | RISK {g.Risk:F0} | Upgrades {g.Owned.Count} | Boosters {g.ActiveBoosts.Count}");
+        const int baseColumnWidth = 24;
+        c.Text(Math.Max(0, (c.Width - 48) / 2), 28, new string('_', 48), ConsoleColor.DarkYellow);
+        string[] left = ["", $"  CASH: ${g.Cash:N2}", $"   PRICE: ${g.Price:N2}", $"    INVENTORY: {g.Inventory:N0}"];
+        string[] right = ["", $"DEBT: ${g.Debt:N2}", $"UNIT COST: ${g.UnitCost:N2}", $"SHARE: {g.Share:N1}%"];
+        for (int i = 0; i < 4; i++)
+        {
+            int columnWidth = baseColumnWidth + i;
+            string clip(string value) => value.Length > columnWidth ? value[..columnWidth] : value.PadRight(columnWidth);
+            c.Text(Math.Max(0, (c.Width - 2 - columnWidth * 2) / 2), 29 + i,
+                "/" + clip(left[i]) + clip(right[i]) + "\\", ConsoleColor.White);
+        }
+        c.Center(33, $"Capacity {g.Capacity} | Quality {g.Quality:F0} | Risk {g.Risk:F0} | Service {g.Preview().Service:F0}%");
     }
     void DrawResult(Canvas c)
     {
@@ -417,7 +467,7 @@ public sealed class GameApp
             c.Text(6, y++, $"[{(okay ? "PASS" : "MISS")}] {quota.Name}: {Metric(quota.Name, value)} / {(quota.AtLeast ? ">=" : "<=")} {Metric(quota.Name, quota.Target)}", okay ? ConsoleColor.Green : ConsoleColor.Red);
         }
         c.Center(20, passed ? g.Cleared == 12 ? "The twelfth month is cleared. Your company made it!"
-            : "+$200 clear bonus. Next: a free booster and the decoration shop."
+            : "+$200 clear bonus. Next: company news, a booster, and the shop."
             : "Missed: " + string.Join(", ", r.Failures));
         c.Button((c.Width - 16) / 2, 23, "ENTER CONTINUE", "continue", selected: true);
         Footer(c, "ENTER / mouse: Continue | ESC: Pause");
@@ -427,9 +477,15 @@ public sealed class GameApp
         Run g = Game!;
         Header(c, "MONTHLY BOOSTER PACK", $"Month {g.Month} reward - choose one free booster");
         c.Center(5, "One choice. Lasting help for the months ahead.", ConsoleColor.Yellow);
-        for (int i = 0; i < 3; i++) DrawCard(c, i, g.Boosters[i].Name, Wrap(g.Boosters[i].Description, 18).ToArray(), selected == i, ConsoleColor.Green);
-        c.Button(5, 24, "ENTER CLAIM + SHOP", "play");
-        c.Button(c.Width - 25, 24, "E SKIP + SHOP", "skip");
+        for (int i = 0; i < 3; i++)
+        {
+            Booster b = g.Boosters[i];
+            DrawCard(c, i, b.Name, GameContent.Flavor(b), [b.Description], b.Rarity, selected == i,
+                b.Family == BoosterFamily.Green ? ConsoleColor.Green : ConsoleColor.Magenta);
+        }
+        c.Text(3, 7, "GREEN: regular boosts | PURPLE: stronger rarities", ConsoleColor.Cyan);
+        c.Button(5, 29, "ENTER CLAIM + SHOP", "play");
+        c.Button(c.Width - 25, 29, "E SKIP + SHOP", "skip");
         Footer(c, "Arrows / 1-3 / mouse: Select | ENTER: Claim | E: Skip booster | ESC: Pause");
     }
     void DrawShop(Canvas c)
@@ -439,22 +495,23 @@ public sealed class GameApp
         int left = (c.Width - 72) / 2;
         for (int i = 0; i < 6; i++)
         {
-            Decoration item = Run.Decorations[i]; int x = left + i % 3 * 24, y = 5 + i / 3 * 7;
+            Decoration item = Run.Decorations[i]; int x = left + i % 3 * 24, y = 5 + i / 3 * 10;
             ConsoleColor color = g.Owned.Contains(i) ? ConsoleColor.DarkGray : i == shopIndex ? ConsoleColor.Yellow : ConsoleColor.White;
             for (int row = 0; row < 3; row++) c.Text(x + 8, y + row, item.Art[row], color);
             c.Text(x, y + 3, $"{i + 1}. {item.Name}", color);
             c.Text(x, y + 4, g.Owned.Contains(i) ? "OWNED" : "$" + item.Cost, color);
-            c.Text(x, y + 5, item.Boost, color);
-            c.Text(x, y + 6, "======================", ConsoleColor.DarkYellow);
-            c.Buttons.Add(new(x, y, 22, 6, "shopSelect", i));
+            c.Wrapped(x, y + 5, GameContent.DecorationFlavor(i), 22, 3, ConsoleColor.Yellow);
+            c.Text(x, y + 8, item.Boost, color);
+            c.Text(x, y + 9, "======================", ConsoleColor.DarkYellow);
+            c.Buttons.Add(new(x, y, 22, 9, "shopSelect", i));
         }
-        c.Text(left + 2, 20, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
-        c.Text(left + 2, 21, "  |o  o|    Choose a decoration, then ENTER to buy.");
-        c.Text(left + 2, 22, " /| -- |\\   New month, same helpful office!");
-        c.Rule(23, ConsoleColor.DarkYellow);
-        c.Button(left, 24, "ENTER BUY", "buy", shopIndex);
-        c.Button(left + 19, 24, "S BACK", "shopBack");
-        c.Button(left + 34, 24, "N NEXT MONTH", "next");
+        c.Text(left + 2, 26, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
+        c.Text(left + 2, 27, "  |o  o|    Choose a decoration, then ENTER to buy.");
+        c.Text(left + 2, 28, " /| -- |\\   New month, same helpful office!");
+        c.Rule(29, ConsoleColor.DarkYellow);
+        c.Button(left, 31, "ENTER BUY", "buy", shopIndex);
+        c.Button(left + 19, 31, "S BACK", "shopBack");
+        c.Button(left + 34, 31, "N NEXT MONTH", "next");
         c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
         Footer(c, "Arrows/1-6: Select | ENTER: Buy | S/ESC: Leave shop | N: Next month");
     }
@@ -520,12 +577,15 @@ public sealed class GameApp
             "2. Choose an Easy, Normal, or Hard chip. Every run lasts 12 months.",
             "3. Each month, use decisions to change price, ads, stock, costs and risk.",
             "4. Select a card with arrows, 1-3, or a mouse click. ENTER plays it.",
-            "5. R rerolls even with no selected card. E ends decisions early.",
+            "5. Start with one reroll per month. R replaces cards; E ends decisions.",
             "6. In the event phase, take ONE card, or E to leave all three.",
             "7. Monthly sales settle automatically. Meet EVERY displayed quota.",
-            "8. After a clear, choose one FREE booster from three random cards.",
-            "9. Shop for persistent decorations. S leaves; N starts the next month.",
-            "10. Meet the twelfth monthly quota to win. One missed month ends the run.",
+            "8. After a clear, company news changes your next month; read its effects.",
+            "9. Choose one FREE booster. Green and purple effects appear on the right.",
+            "10. Shop for decorations. S leaves; N starts the next month.",
+            "11. Meet twelve monthly quotas to win. One missed month ends the run.",
+            "Common, Uncommon, Rare, Epic, Legendary: less common, more unusual.",
+            "I explains a selected card. Click side boosters; PgUp/PgDn scrolls them.",
             "Profit includes sold-stock costs, ads, overhead, interest and events.",
             "Stock purchases use cash now; unsold stock remains for later months."
         ];

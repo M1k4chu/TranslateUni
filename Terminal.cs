@@ -56,6 +56,14 @@ public sealed class Canvas
     }
     public string[] Lines() => Enumerable.Range(0, Height).Select(y =>
         new string(Enumerable.Range(0, Width).Select(x => cells[y, x]).ToArray())).ToArray();
+    public ConsoleColor ColorAt(int x, int y) => colors[y, x];
+    public void Paste(Canvas source, int left, int top)
+    {
+        for (int y = 0; y < source.Height && y + top < Height; y++)
+            for (int x = 0; x < source.Width && x + left < Width; x++)
+            { cells[y + top, x + left] = source.cells[y, x]; colors[y + top, x + left] = source.colors[y, x]; }
+        Buttons.AddRange(source.Buttons.Select(b => b with { X = b.X + left, Y = b.Y + top }));
+    }
     public void Flush()
     {
         for (int y = 0; y < Height; y++)

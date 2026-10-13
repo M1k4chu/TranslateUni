@@ -1,15 +1,23 @@
 namespace BusinessGame;
 
 public enum Difficulty { Easy, Normal, Hard }
-public enum Phase { Decisions, Events, Result, Booster, Shop, Won, Lost }
+public enum Phase { Decisions, Events, Result, SpecialEvent, Booster, Shop, Won, Lost }
+public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
+public enum BoosterFamily { Green, Purple }
 public enum CardKind
 {
     Advertise, RaisePrice, LowerPrice, Restock, Efficiency, Factory, Repay, Borrow,
-    SellShares, CustomerCare, Sale, CourseFocus, Research, Insurance, Investment, Express
+    SellShares, CustomerCare, Sale, CourseFocus, Research, Insurance, Investment, Express,
+    BundleDeal, LoyaltyProgram, StaffTraining, SupplierDeal, Overtime, QualityAudit,
+    Crowdfunding, DebtRefinance, Warehouse, ProductRefresh, Automation, Influencer,
+    PremiumLaunch, EmergencyShipment, ExportContract, BoardRestructure
 }
-public sealed record Card(CardKind Kind, string Name);
-public sealed record EventCard(string Name, string Description, EventData? Imported = null, int Custom = -1);
-public sealed record Booster(string Name, string Description, int Id);
+public sealed record Card(CardKind Kind, string Name, Rarity Rarity = Rarity.Common);
+public sealed record EventCard(string Name, string Description, EventData? Imported = null, int Custom = -1, Rarity Rarity = Rarity.Common);
+public sealed record Booster(string Name, string Description, int Id, Rarity Rarity = Rarity.Common,
+    BoosterFamily Family = BoosterFamily.Green, bool Persistent = true);
+public sealed record ActiveBooster(Booster Card, int Stacks = 1);
+public sealed record CompanyEvent(string Name, string Flavor, string Description, int Id, Rarity Rarity = Rarity.Common);
 public sealed record Decoration(string Name, int Cost, string Boost, string[] Art, int Id);
 public sealed record Quota(string Name, double Target, bool AtLeast = true);
 public sealed record MonthReport(int Month, double Revenue, double Profit, int Sold, double Service,
@@ -43,7 +51,10 @@ public sealed class Run
     public List<EventCard> Events { get; private set; } = [];
     public List<Booster> Boosters { get; private set; } = [];
     public HashSet<int> Owned { get; } = [];
-    public List<string> ActiveBoosts { get; } = [];
+    public List<ActiveBooster> ActiveBoosts { get; } = [];
+    public CompanyEvent? CompanyNews { get; private set; }
+    public List<CompanyEvent> NewsHistory { get; } = [];
+    public bool Tutorial { get; }
     public List<MonthReport> Reports { get; } = [];
     public MonthReport? LastReport => Reports.LastOrDefault();
     public bool BoosterClaimed { get; private set; }
@@ -52,6 +63,7 @@ public sealed class Run
     double extraInterest, demandBonus, marginBonus, fixedDiscount;
     int extraRerolls, extraActions, stockBonus;
     bool insured;
+    double nextDemand = 1, nextCost = 1, nextCapacity = 1, nextOverheadDiscount, monthOverheadDiscount;
 
     public static readonly Decoration[] Decorations =
     [
@@ -62,31 +74,61 @@ public sealed class Run
         new("Lucky Cat", 400, "+1 reroll each month", ["/\\_/\\", "(o.o)", " /|_ "], 4),
         new("Desk Fountain", 400, "Overhead -$60/month", [" ~|~ ", "(_|_)", "[___]"], 5)
     ];
-    static readonly Booster[] BoosterPool =
+    public static readonly Booster[] BoosterPool =
     [
         new("Brand Spark", "+4% demand every month", 0),
         new("Lean Operations", "Unit cost -$0.35", 1),
-        new("Safety Stock", "+100 free stock now", 2),
-        new("Investor Grant", "+$450 cash now", 3),
+        new("Safety Stock", "+100 free stock now", 2, Persistent: false),
+        new("Investor Grant", "+$450 cash now", 3, Persistent: false),
         new("Loyal Customers", "+1% share; +3% demand", 4),
         new("Buying Power", "+$0.50 per sale forever", 5),
-        new("Fresh Perspective", "+1 reroll each month", 6),
-        new("Reliable Supply", "+40 free stock each month", 7),
-        new("Quality Culture", "+8 quality; risk -5", 8)
+        new("Fresh Perspective", "+1 reroll each month", 6, Rarity.Uncommon),
+        new("Reliable Supply", "+40 free stock each month", 7, Rarity.Uncommon),
+        new("Quality Culture", "+8 quality; risk -5", 8, Rarity.Uncommon),
+        new("Coupon Engine", "+$0.75 per sale; -$25 overhead/month", 9, Rarity.Rare, BoosterFamily.Purple),
+        new("Steady Dividend", "+$75 income each month", 10, Rarity.Uncommon),
+        new("Warehouse Fairy", "+65 free stock each month", 11, Rarity.Rare, BoosterFamily.Purple),
+        new("Creative Team", "+6% demand every month", 12, Rarity.Uncommon),
+        new("Credit Whisperer", "Debt -$350 now; overhead -$20/month", 13, Rarity.Uncommon),
+        new("Golden Handshake", "+$1.50 per sale", 14, Rarity.Epic, BoosterFamily.Purple),
+        new("Overtime Owl", "+1 decision each month", 15, Rarity.Rare, BoosterFamily.Purple),
+        new("Supply Wizard", "Unit cost -$0.80; capacity +60", 16, Rarity.Epic, BoosterFamily.Purple),
+        new("PR Guardian", "+6 quality; next scandals softened", 17, Rarity.Rare, BoosterFamily.Purple),
+        new("Unicorn Investor", "+$150 income and +35 free stock/month", 18, Rarity.Legendary, BoosterFamily.Purple),
+        new("Second Chance", "+1 reroll/month; risk -8", 19, Rarity.Uncommon)
     ];
 
-    public Run(Course course, int topicIndex, Difficulty difficulty, int seed)
+    public static readonly CompanyEvent[] CompanyEventPool =
+    [
+        new("New Competitor", "Someone stole your homework", "Next month: demand -8%. Restock cautiously or improve advertising.", 0),
+        new("Internet Scandal", "The comments are on fire", "Next month: demand -10%. Quality -6 and risk +5 now. PR Guardian halves these losses.", 1),
+        new("Good PR", "The internet likes you today", "Next month: demand +10%. Share +0.5% now.", 2),
+        new("New Company Majority", "New boss, extra bossiness", "Cash +$350 now; share -0.5% and risk +3. No new debt.", 3, Rarity.Uncommon),
+        new("Supplier Strike", "Boxes took the day off", "Next month: capacity -10%. Existing inventory is safe.", 4),
+        new("Venture Investor", "Money arrived wearing a suit", "Cash +$500 now; debt +$200. More cash, more responsibility.", 5, Rarity.Uncommon),
+        new("Viral Meme", "Your logo became a meme", "Next month: demand +15%. Quality +2 now.", 6, Rarity.Rare),
+        new("Tax Relief", "The taxman found compassion", "Next month's overhead is $80 lower.", 7, Rarity.Uncommon),
+        new("Local Business Award", "Mom finally understands your job", "Quality +4 and share +0.3% now.", 8),
+        new("Market Boom", "Everybody suddenly wants your stuff", "Next month: demand +12%, unit costs +5%.", 9, Rarity.Uncommon),
+        new("Board Audit", "Spreadsheets scared the debt away", "Debt -$100 and risk -5 now.", 10),
+        new("Logistics Breakthrough", "Boxes learned to teleport", "Free stock +50 and permanent capacity +25.", 11, Rarity.Rare)
+    ];
+
+    public Run(Course course, int topicIndex, Difficulty difficulty, int seed, bool tutorial = false)
     {
         if (topicIndex < 0 || topicIndex >= course.Lessons.Count) throw new ArgumentOutOfRangeException(nameof(topicIndex));
         Course = course; TopicIndex = topicIndex; Lesson = course.Lessons[topicIndex]; Difficulty = difficulty;
         random = new Random(seed);
+        Tutorial = tutorial;
         StartMonth();
     }
 
-    public double ProfitTarget => Math.Round((1050 + (int)Difficulty * 375 + TopicIndex * 70) * (1 + (Month - 1) * 0.14));
-    public List<Quota> Quotas()
+    public double ProfitTarget => ProfitTargetFor(Month);
+    public double ProfitTargetFor(int month) => Math.Round((1050 + (int)Difficulty * 375 + TopicIndex * 70) * (1 + (month - 1) * 0.14));
+    public List<Quota> Quotas(int? forMonth = null)
     {
-        var result = new List<Quota> { new("Profit", ProfitTarget) };
+        int quotaMonth = forMonth ?? Month;
+        var result = new List<Quota> { new("Profit", ProfitTargetFor(quotaMonth)) };
         switch (Course.Name)
         {
             case "Marketing": result.Add(new("Share", 16 + (int)Difficulty)); break;
@@ -97,7 +139,7 @@ public sealed class Run
             case "Project Management": result.Add(new("Quality", 65 + (int)Difficulty * 5)); break;
         }
         if (TopicIndex >= 3 && result.All(q => q.Name != "Service")) result.Add(new("Service", 65 + (int)Difficulty * 5));
-        if (TopicIndex >= 6) result.Add(new("Cash", 700 + Month * 75 + (int)Difficulty * 150));
+        if (TopicIndex >= 6) result.Add(new("Cash", 700 + quotaMonth * 75 + (int)Difficulty * 150));
         if (TopicIndex >= 9 && result.All(q => q.Name != "Quality")) result.Add(new("Quality", 70 + (int)Difficulty * 3));
         return result;
     }
@@ -117,7 +159,7 @@ public sealed class Run
         int sold = Math.Min(wanted, Math.Min(Inventory, Math.Max(0, (int)(Capacity * capacityShock))));
         double revenue = sold * (effectivePrice + marginBonus);
         double carbon = Lesson.Name == "Externalities" ? 3 : 0;
-        double overhead = Math.Max(60, 300 + TopicIndex * 15 - fixedDiscount);
+        double overhead = Math.Max(60, 300 + TopicIndex * 15 - fixedDiscount - monthOverheadDiscount);
         double interest = Debt * (0.02 + (int)Difficulty * 0.005 + extraInterest);
         double carryCost = Math.Max(0, Inventory - sold) * (Course.Name == "Logistics" ? 0.35 : 0.08);
         double profit = revenue - sold * (UnitCost * costShock + carbon) - overhead - spending - interest - carryCost + InvestmentIncome;
@@ -136,7 +178,12 @@ public sealed class Run
         CardKind.Advertise => 180, CardKind.Restock => RestockUnits * UnitCost * costShock,
         CardKind.Efficiency => 250, CardKind.Factory => 800, CardKind.Repay => Math.Min(350, Debt),
         CardKind.CustomerCare => 120, CardKind.CourseFocus => 150, CardKind.Research => 180,
-        CardKind.Insurance => 100, CardKind.Investment => 500, CardKind.Express => 300, _ => 0
+        CardKind.Insurance => 100, CardKind.Investment => 500, CardKind.Express => 300,
+        CardKind.BundleDeal => 90, CardKind.LoyaltyProgram => 160, CardKind.StaffTraining => 250,
+        CardKind.SupplierDeal => 220, CardKind.Overtime => 180, CardKind.QualityAudit => 140,
+        CardKind.DebtRefinance => 200, CardKind.Warehouse => 450, CardKind.ProductRefresh => 300,
+        CardKind.Automation => 900, CardKind.Influencer => 380, CardKind.PremiumLaunch => 650,
+        CardKind.EmergencyShipment => 450, CardKind.ExportContract => 200, CardKind.BoardRestructure => 700, _ => 0
     };
     public string[] Describe(CardKind kind) => kind switch
     {
@@ -156,6 +203,22 @@ public sealed class Run
         CardKind.Insurance => ["Spend $100", "Block bad events", "This month only"],
         CardKind.Investment => ["Spend $500", "Income +$90/month", "Starts next month"],
         CardKind.Express => ["Spend $300", "Free stock +60", "Month capacity +20%"],
+        CardKind.BundleDeal => ["Spend $90", "Month demand +12%", "Price -$0.50"],
+        CardKind.LoyaltyProgram => ["Spend $160", "Share +0.8%", "Demand +2% forever"],
+        CardKind.StaffTraining => ["Spend $250", "Quality +6", "Capacity +30"],
+        CardKind.SupplierDeal => ["Spend $220", "Unit cost -$0.40", "Permanent saving"],
+        CardKind.Overtime => ["Spend $180", "Month capacity +25%", "Quality -2"],
+        CardKind.QualityAudit => ["Spend $140", "Risk -8", "Quality +5"],
+        CardKind.Crowdfunding => ["Cash +$600", "Debt +$300", "Share -0.5%"],
+        CardKind.DebtRefinance => ["Spend $200", "Debt -$250", "Risk -4"],
+        CardKind.Warehouse => ["Spend $450", "Capacity +75", "Free stock +80"],
+        CardKind.ProductRefresh => ["Spend $300", "Quality +4", "Demand +3% forever"],
+        CardKind.Automation => ["Spend $900", "Unit cost -$0.90", "Capacity +60"],
+        CardKind.Influencer => ["Spend $380", "Ad reach +800", "Risk +4; share +0.4%"],
+        CardKind.PremiumLaunch => ["Spend $650", "Price +$2", "Quality +6", "Share +0.6%"],
+        CardKind.EmergencyShipment => ["Spend $450", "Free stock +100", "Immediate delivery"],
+        CardKind.ExportContract => ["Spend $200", "Cash/profit +$150", "Month demand +25%"],
+        CardKind.BoardRestructure => ["Spend $700", "Debt -$400", "Quality +8; share +1%", "Risk -8"],
         _ => []
     };
     string[] FocusDescription() => Course.Name switch
@@ -193,6 +256,22 @@ public sealed class Run
             case CardKind.Insurance: insured = true; spending += cost; break;
             case CardKind.Investment: pendingIncome += 90; break;
             case CardKind.Express: Inventory += 60; capacityShock *= 1.2; spending += cost; break;
+            case CardKind.BundleDeal: Price = Math.Max(5, Price - 0.5); demandShock *= 1.12; spending += cost; break;
+            case CardKind.LoyaltyProgram: Share += 0.8; demandBonus += 0.02; spending += cost; break;
+            case CardKind.StaffTraining: Quality = Math.Min(100, Quality + 6); Capacity += 30; break;
+            case CardKind.SupplierDeal: UnitCost = Math.Max(3, UnitCost - 0.4); break;
+            case CardKind.Overtime: capacityShock *= 1.25; Quality = Math.Max(0, Quality - 2); spending += cost; break;
+            case CardKind.QualityAudit: Risk = Math.Max(0, Risk - 8); Quality = Math.Min(100, Quality + 5); spending += cost; break;
+            case CardKind.Crowdfunding: Cash += 600; Debt += 300; Share = Math.Max(1, Share - 0.5); break;
+            case CardKind.DebtRefinance: Debt = Math.Max(0, Debt - 250); Risk = Math.Max(0, Risk - 4); break;
+            case CardKind.Warehouse: Capacity += 75; Inventory += 80; break;
+            case CardKind.ProductRefresh: Quality = Math.Min(100, Quality + 4); demandBonus += 0.03; break;
+            case CardKind.Automation: UnitCost = Math.Max(3, UnitCost - 0.9); Capacity += 60; break;
+            case CardKind.Influencer: Advertising += 800; Risk += 4; Share += 0.4; spending += cost; break;
+            case CardKind.PremiumLaunch: Price = Math.Min(60, Price + 2); Quality = Math.Min(100, Quality + 6); Share += 0.6; break;
+            case CardKind.EmergencyShipment: Inventory += 100; break;
+            case CardKind.ExportContract: demandShock *= 1.25; Cash += 150; spending += cost - 150; break;
+            case CardKind.BoardRestructure: Debt = Math.Max(0, Debt - 400); Quality = Math.Min(100, Quality + 8); Share++; Risk = Math.Max(0, Risk - 8); break;
         }
         Share = Math.Clamp(Share, 1, 60); Risk = Math.Clamp(Risk, 0, 100);
         Actions--;
@@ -260,6 +339,11 @@ public sealed class Run
             case 6:
                 double payout = random.NextDouble() < 0.65 ? 550 : insured ? 0 : -250;
                 Cash += payout; spending -= payout; break;
+            case 7: Cash += 180; spending -= 180; Quality = Math.Min(100, Quality + 2); break;
+            case 8: costShock *= 0.85; demandShock *= 1.05; break;
+            case 9: Advertising += 400; Risk = Math.Min(100, Risk + 6); break;
+            case 10: Cash += 600; spending -= 600; if (!insured) capacityShock *= 0.9; break;
+            case 11: Cash += 900; spending -= 900; break;
         }
         Message = "Accepted " + card.Name + ".";
         SettleMonth();
@@ -291,10 +375,38 @@ public sealed class Run
     {
         if (Phase != Phase.Result) return;
         if (LastReport!.Failures.Count > 0) { Phase = Phase.Lost; return; }
-        if (Cleared == 12) { Phase = Phase.Won; return; }
-        Boosters = Shuffled(BoosterPool).Take(3).ToList();
-        BoosterClaimed = false; Phase = Phase.Booster;
+        CompanyNews = Tutorial ? CompanyEventPool[2] : Weighted(CompanyEventPool, e => e.Rarity, 1)[0];
+        Phase = Phase.SpecialEvent;
     }
+    public bool AcknowledgeCompanyEvent()
+    {
+        if (Phase != Phase.SpecialEvent || CompanyNews == null) return false;
+        CompanyEvent news = CompanyNews;
+        NewsHistory.Add(news);
+        if (Cleared == 12) { Phase = Phase.Won; return true; }
+        switch (news.Id)
+        {
+            case 0: nextDemand *= 0.92; break;
+            case 1:
+                double loss = prGuardian ? 0.5 : 1;
+                nextDemand *= 1 - 0.10 * loss; Quality = Math.Max(0, Quality - 6 * loss); Risk = Math.Min(100, Risk + 5 * loss); break;
+            case 2: nextDemand *= 1.1; Share = Math.Min(60, Share + 0.5); break;
+            case 3: Cash += 350; Share = Math.Max(1, Share - 0.5); Risk = Math.Min(100, Risk + 3); break;
+            case 4: nextCapacity *= 0.9; break;
+            case 5: Cash += 500; Debt += 200; break;
+            case 6: nextDemand *= 1.15; Quality = Math.Min(100, Quality + 2); break;
+            case 7: nextOverheadDiscount += 80; break;
+            case 8: Quality = Math.Min(100, Quality + 4); Share = Math.Min(60, Share + 0.3); break;
+            case 9: nextDemand *= 1.12; nextCost *= 1.05; break;
+            case 10: Debt = Math.Max(0, Debt - 100); Risk = Math.Max(0, Risk - 5); break;
+            case 11: Inventory += 50; Capacity += 25; break;
+        }
+        Boosters = Tutorial ? [BoosterPool[0], BoosterPool[9], BoosterPool[7]] : Weighted(BoosterPool, b => b.Rarity, 3);
+        BoosterClaimed = false; Phase = Phase.Booster;
+        Message = news.Name + ": changes begin now or next month, as shown.";
+        return true;
+    }
+    bool prGuardian;
     public bool ClaimBooster(int index)
     {
         if (Phase != Phase.Booster || BoosterClaimed || index < 0 || index >= Boosters.Count) return false;
@@ -310,8 +422,27 @@ public sealed class Run
             case 6: extraRerolls++; break;
             case 7: stockBonus += 40; break;
             case 8: Quality = Math.Min(100, Quality + 8); Risk = Math.Max(0, Risk - 5); break;
+            case 9: marginBonus += 0.75; fixedDiscount += 25; break;
+            case 10: pendingIncome += 75; break;
+            case 11: stockBonus += 65; break;
+            case 12: demandBonus += 0.06; break;
+            case 13: Debt = Math.Max(0, Debt - 350); fixedDiscount += 20; break;
+            case 14: marginBonus += 1.5; break;
+            case 15: extraActions++; break;
+            case 16: UnitCost = Math.Max(3, UnitCost - 0.8); Capacity += 60; break;
+            case 17: Quality = Math.Min(100, Quality + 6); prGuardian = true; break;
+            case 18: pendingIncome += 150; stockBonus += 35; break;
+            case 19: extraRerolls++; Risk = Math.Max(0, Risk - 8); break;
         }
-        BoosterClaimed = true; ActiveBoosts.Add(card.Name); Message = "Booster: " + card.Name;
+        BoosterClaimed = true; TrackBooster(card); Message = "Booster: " + card.Name;
+        if (Tutorial)
+        {
+            Booster gift = card.Family == BoosterFamily.Green ? BoosterPool[9] : BoosterPool[0];
+            if (gift.Id == 9) { marginBonus += 0.75; fixedDiscount += 25; }
+            else demandBonus += 0.04;
+            TrackBooster(gift);
+            Message += ". Tutorial gift: " + gift.Name + ".";
+        }
         Phase = Phase.Shop; return true;
     }
     public bool SkipBooster()
@@ -346,8 +477,11 @@ public sealed class Run
     void StartMonth()
     {
         Actions = (Difficulty == Difficulty.Hard ? 2 : 3) + extraActions;
-        Rerolls = (Difficulty == Difficulty.Easy ? 4 : Difficulty == Difficulty.Normal ? 3 : 2) + extraRerolls;
-        spending = 0; demandShock = costShock = capacityShock = 1; referencePrice = 25; extraInterest = 0;
+        Rerolls = 1 + extraRerolls;
+        spending = 0; demandShock = nextDemand; costShock = nextCost; capacityShock = nextCapacity;
+        monthOverheadDiscount = nextOverheadDiscount;
+        nextDemand = nextCost = nextCapacity = 1; nextOverheadDiscount = 0;
+        referencePrice = 25; extraInterest = 0;
         insured = false; Phase = Phase.Decisions;
         Inventory += stockBonus;
         InvestmentIncome += pendingIncome; pendingIncome = 0;
@@ -357,27 +491,17 @@ public sealed class Run
     }
     void DealHand()
     {
-        var pool = new List<Card>
-        {
-            new(CardKind.Advertise, "Advertise Product"), new(CardKind.RaisePrice, "Premium Pricing"),
-            new(CardKind.LowerPrice, "Price Cut"), new(CardKind.Restock, "Restock Inventory"),
-            new(CardKind.Efficiency, "Lean Production"), new(CardKind.Factory, "New Factory"),
-            new(CardKind.Repay, "Repay Debt"), new(CardKind.SellShares, "Sell Company Shares"),
-            new(CardKind.CustomerCare, "Customer Care"), new(CardKind.Sale, "Black Friday Sale"),
-            new(CardKind.CourseFocus, Course.Name + " Focus")
-        };
-        if (TopicIndex >= 3 || Course.Name == "Finance") pool.Add(new(CardKind.Borrow, "Bridge Loan"));
-        if (TopicIndex >= 6 || Course.Name == "Probability")
-        {
-            pool.Add(new(CardKind.Research, "Market Research")); pool.Add(new(CardKind.Insurance, "Risk Insurance"));
-        }
-        if (Course.Name == "Finance") pool.Add(new(CardKind.Investment, "Capital Investment"));
-        if (Course.Name == "Logistics") pool.Add(new(CardKind.Express, "Express Supplier"));
-        Hand = Shuffled(pool).Take(3).ToList();
+        List<Card> pool = GameContent.Decisions.ToList();
+        tutorialDeals++;
+        CardKind[] lessonHand = tutorialDeals == 1 ? [CardKind.Advertise, CardKind.Restock, CardKind.Sale]
+            : tutorialDeals == 2 ? [CardKind.Efficiency, CardKind.Restock, CardKind.CustomerCare]
+            : [CardKind.Sale, CardKind.Research, CardKind.Restock];
+        Hand = Tutorial ? lessonHand.Select(kind => pool.Single(c => c.Kind == kind)).ToList() : Weighted(pool, c => c.Rarity, 3);
         // A shortage always offers a way to replenish stock; rerolls never trap the player.
         if (Inventory < Preview().Demand && Hand.All(c => c.Kind != CardKind.Restock))
             Hand[0] = pool.Single(c => c.Kind == CardKind.Restock);
     }
+    int tutorialDeals;
     void DealEvents()
     {
         var pool = Lesson.Simulation.Events.Select(e => new EventCard(e.Name, e.Description, e)).ToList();
@@ -391,8 +515,29 @@ public sealed class Run
             new("Supplier Rebate", "Unit cost -10% this month.", Custom: 5),
             new("Risky Opportunity", "65%: +$550; 35%: -$250 cash/profit.", Custom: 6)
         });
-        Events = Shuffled(pool).Take(3).ToList();
+        pool.AddRange(new EventCard[]
+        {
+            new("Office Bake Sale", "Cash/profit +$180; quality +2.", Custom: 7),
+            new("Bulk Supplier Deal", "Unit cost -15% this month; demand +5%.", Custom: 8, Rarity: Rarity.Uncommon),
+            new("Influencer Oops", "Ad reach +400; risk +6.", Custom: 9, Rarity: Rarity.Uncommon),
+            new("Export Windfall", "Cash/profit +$600; capacity -10% this month.", Custom: 10, Rarity: Rarity.Rare),
+            new("Corporate Jackpot", "Cash/profit +$900 now.", Custom: 11, Rarity: Rarity.Legendary)
+        });
+        Events = Tutorial ? [pool.First(e => e.Custom == 0), pool.First(e => e.Custom == 5), pool.First(e => e.Custom == 6)]
+            : Weighted(pool, e => e.Rarity, 3);
     }
+    void TrackBooster(Booster card)
+    {
+        if (!card.Persistent) return; // Cash/stock gifts are spent immediately, not active effects.
+        int index = ActiveBoosts.FindIndex(b => b.Card.Id == card.Id);
+        if (index < 0) ActiveBoosts.Add(new(card));
+        else ActiveBoosts[index] = ActiveBoosts[index] with { Stacks = ActiveBoosts[index].Stacks + 1 };
+    }
+    public static double RarityWeight(Rarity rarity) => rarity switch
+    { Rarity.Common => 6, Rarity.Uncommon => 3, Rarity.Rare => 1, Rarity.Epic => 0.35, _ => 0.1 };
+    List<T> Weighted<T>(IEnumerable<T> source, Func<T, Rarity> rarity, int count)
+        => source.Select(item => (Item: item, Score: -Math.Log(Math.Max(1e-12, random.NextDouble())) / RarityWeight(rarity(item))))
+            .OrderBy(item => item.Score).Take(count).Select(item => item.Item).ToList();
     IEnumerable<T> Shuffled<T>(IEnumerable<T> source)
     {
         var list = source.ToList();

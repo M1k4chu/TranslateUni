@@ -26,7 +26,7 @@ public static class Catalog
     public static List<Course> Load()
     {
         using Stream data = Assembly.GetExecutingAssembly().GetManifestResourceStream("BusinessGame.CourseData")
-            ?? throw new InvalidOperationException("Course data is missing. Build using BusinessGameV2.csproj.");
+            ?? throw new InvalidOperationException("Course data is missing. Build using BusinessGameV3.csproj.");
         List<Course> courses = JsonSerializer.Deserialize<List<Course>>(data)
             ?? throw new InvalidOperationException("Course data is empty.");
         if (courses.Count != 6 || courses.Any(c => c.Lessons.Count != 10))
