@@ -1,9 +1,44 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
+
 class Program
 {
     const int CardWidth = 22;
     const int CardHeight = 10;
     const int CardSpace = 24;
     static int rerolls = 3;
+    const int CardBaseY = 2;
+    const int SelectionLift = 2;
+    static double cash = 5000, debt = 1200, price = 25, unitCost = 12, share = 18;
+    static int inventory = 450;
+    static bool inShop;
+    static int shopSelection;
+    static string shopMessage = "Select an item with 1-6 or arrows, then ENTER to buy.";
+
+    sealed class Decoration
+    {
+        public string Name { get; }
+        public int Cost { get; }
+        public string Boost { get; }
+        public string[] Art { get; }
+        public Action Apply { get; }
+        public bool Owned { get; set; }
+
+        public Decoration(string name, int cost, string boost, string[] art, Action apply)
+        {
+            Name = name; Cost = cost; Boost = boost; Art = art; Apply = apply;
+        }
+    }
+
+    static readonly Decoration[] ShopItems =
+    {
+        new("Desk Plant", 100, "Share +0.5%", new[] { "  \\|/  ", "  /|\\  ", "  [__] " }, () => share += 0.5),
+        new("Desk Lamp", 150, "Unit cost -$0.25", new[] { "  ___  ", " /___\\ ", "   |__ " }, () => unitCost = Math.Max(0, unitCost - 0.25)),
+        new("Wall Clock", 125, "Inventory +15", new[] { " .---. ", " | / | ", " '---' " }, () => inventory += 15),
+        new("Motivation Art", 175, "Price +$0.50", new[] { " +---+ ", " |UP!| ", " +---+ " }, () => price += 0.5),
+        new("Lucky Cat", 200, "Extra reroll +1", new[] { " /\\_/\\ ", " (o.o) ", "  /|_  " }, () => rerolls++),
+        new("Desk Fountain", 150, "Debt -$75", new[] { "  ~|~  ", " (_|_) ", " [___] " }, () => debt = Math.Max(0, debt - 75))
+    };
 
 
     static Random random = new Random();
@@ -79,7 +114,7 @@ class Program
         );
         int centerX = firstCardX + selected * CardSpace;
 
-        int baseY = 2;
+        int baseY = CardBaseY - SelectionLift;
 
         // Shrink the chosen card horizontally
         for (int frame = 0; frame < 10; frame++)
@@ -201,11 +236,12 @@ class Program
     static void Main()
     {
         string[][] cards = DrawThreeCards();
-        int selected = 0;
+        int selected = -1;
         bool confirmed = false;
 
         try
         {
+            using var input = new GameInput();
             Console.CursorVisible = false;
             Console.Clear();
 
@@ -213,62 +249,73 @@ class Program
 
             while (true)
             {
-                ConsoleKeyInfo key = Console.ReadKey(true);
+                ConsoleKey key = input.ReadKey();
 
-                if (key.Key == ConsoleKey.Escape)
-                    break;
-
-                if (confirmed)
+                if (key == ConsoleKey.S || (inShop && key == ConsoleKey.Escape))
                 {
-                    if (key.Key == ConsoleKey.R && rerolls > 0)
-                    {
-                        rerolls--;
-
-                        // Animate the currently chosen card away
-                        AnimateChosenCardAway(cards[selected], selected);
-
-                        // Deal a fresh set of three cards
-                        cards = DrawThreeCards();
-
-                        selected = 0;
-                        confirmed = false;
-
-                        DrawScene(cards, selected, false);
-                    }
-
+                    inShop = !inShop;
+                    Console.Clear();
+                    if (inShop) DrawShop();
+                    else DrawScene(cards, selected, confirmed);
                     continue;
                 }
+
+                if (key == ConsoleKey.Escape)
+                    break;
+
+                if (inShop)
+                {
+                    HandleShopKey(key);
+                    DrawShop();
+                    continue;
+                }
+
+                if (key == ConsoleKey.R && rerolls > 0)
+                {
+                    if (confirmed)
+                    {
+                        AnimateChosenCardAway(cards[selected], selected);
+                    }
+                    TryReroll(ref cards, ref selected, ref confirmed);
+                    DrawScene(cards, selected, confirmed);
+                    continue;
+                }
+
+                if (confirmed) continue;
 
                 int previous = selected;
 
                 // Arrows move between cards without wrapping
-                if (key.Key == ConsoleKey.LeftArrow ||
-                    key.Key == ConsoleKey.UpArrow)
+                if (key == ConsoleKey.LeftArrow ||
+                    key == ConsoleKey.UpArrow)
                 {
                     selected = Math.Max(0, selected - 1);
                 }
-                else if (key.Key == ConsoleKey.RightArrow ||
-                         key.Key == ConsoleKey.DownArrow)
+                else if (key == ConsoleKey.RightArrow ||
+                         key == ConsoleKey.DownArrow)
                 {
                     selected = Math.Min(cards.Length - 1, selected + 1);
                 }
 
                 // Keep number-key selection too
-                else if (key.Key == ConsoleKey.D1 ||
-                         key.Key == ConsoleKey.NumPad1)
+                else if (key == ConsoleKey.D1 ||
+                         key == ConsoleKey.NumPad1)
                     selected = 0;
 
-                else if (key.Key == ConsoleKey.D2 ||
-                         key.Key == ConsoleKey.NumPad2)
+                else if (key == ConsoleKey.D2 ||
+                         key == ConsoleKey.NumPad2)
                     selected = 1;
 
-                else if (key.Key == ConsoleKey.D3 ||
-                         key.Key == ConsoleKey.NumPad3)
+                else if (key == ConsoleKey.D3 ||
+                         key == ConsoleKey.NumPad3)
                     selected = 2;
 
-                else if (key.Key == ConsoleKey.Enter)
+                else if (key == ConsoleKey.Spacebar)
+                    selected = -1;
+                else if (key == ConsoleKey.Enter && selected >= 0)
                 {
                     AnimateAway(cards, selected);
+                    ApplyCardEffects(cards[selected]);
                     confirmed = true;
                     DrawScene(cards, selected, true);
                     continue;
@@ -284,6 +331,96 @@ class Program
             Console.CursorVisible = true;
             Console.Clear();
         }
+    }
+
+    static bool TryReroll(ref string[][] cards, ref int selected, ref bool confirmed)
+    {
+        if (rerolls <= 0) return false;
+        cards = DrawThreeCards();
+        rerolls--;
+        selected = -1;
+        confirmed = false;
+        return true;
+    }
+
+    static void ApplyCardEffects(string[] card)
+    {
+        foreach (string line in card)
+        {
+            string[] parts = line.Split(':', 2);
+            if (parts.Length != 2) continue;
+            string amount = parts[1].Replace("$", "").Replace("%", "").Trim();
+            if (!double.TryParse(amount, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)) continue;
+            switch (parts[0].Trim())
+            {
+                case "Cash": cash += value; break;
+                case "Debt": debt = Math.Max(0, debt + value); break;
+                case "Price": price = Math.Max(0, price + value); break;
+                case "Unit cost": unitCost = Math.Max(0, unitCost + value); break;
+                case "Inventory": inventory = Math.Max(0, inventory + (int)value); break;
+                case "Share": share = Math.Clamp(share + value, 0, 100); break;
+            }
+        }
+    }
+
+    static bool BuyDecoration(int index)
+    {
+        if (index < 0 || index >= ShopItems.Length) return false;
+        Decoration item = ShopItems[index];
+        if (item.Owned) { shopMessage = "You already own " + item.Name + "."; return false; }
+        if (cash < item.Cost) { shopMessage = "Not enough cash for " + item.Name + "."; return false; }
+        cash -= item.Cost;
+        item.Apply();
+        item.Owned = true;
+        shopMessage = "Bought " + item.Name + "! " + item.Boost + ".";
+        return true;
+    }
+
+    static void HandleShopKey(ConsoleKey key)
+    {
+        int number = key >= ConsoleKey.D1 && key <= ConsoleKey.D6 ? key - ConsoleKey.D1
+            : key >= ConsoleKey.NumPad1 && key <= ConsoleKey.NumPad6 ? key - ConsoleKey.NumPad1 : -1;
+        if (number >= 0) shopSelection = number;
+        else if (key == ConsoleKey.LeftArrow) shopSelection = Math.Max(0, shopSelection - 1);
+        else if (key == ConsoleKey.RightArrow) shopSelection = Math.Min(5, shopSelection + 1);
+        else if (key == ConsoleKey.UpArrow) shopSelection = Math.Max(0, shopSelection - 3);
+        else if (key == ConsoleKey.DownArrow) shopSelection = Math.Min(5, shopSelection + 3);
+        else if (key == ConsoleKey.Enter) BuyDecoration(shopSelection);
+    }
+
+    static void DrawShop()
+    {
+        int left = Math.Max(0, (Console.WindowWidth - 72) / 2);
+        for (int y = 0; y < Math.Min(25, Console.BufferHeight); y++)
+            WriteAt(0, y, new string(' ', Math.Max(0, Console.BufferWidth - 1)));
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        WriteAt(left, 0, "OFFICE ODDITIES  |  Cash: $" + cash.ToString("N2"));
+        Console.ResetColor();
+        for (int i = 0; i < ShopItems.Length; i++)
+        {
+            Decoration item = ShopItems[i];
+            int x = left + i % 3 * 24;
+            int y = 2 + i / 3 * 7;
+            Console.ForegroundColor = item.Owned ? ConsoleColor.DarkGray
+                : i == shopSelection ? ConsoleColor.Yellow : ConsoleColor.Gray;
+            for (int row = 0; row < item.Art.Length; row++) WriteAt(x + 7, y + row, item.Art[row]);
+            WriteAt(x, y + 3, $"{i + 1}. {item.Name}");
+            WriteAt(x, y + 4, item.Owned ? "OWNED" : "$" + item.Cost + "  " + item.Boost);
+            WriteAt(x, y + 5, item.Boost);
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            WriteAt(x, y + 6, "======================");
+        }
+        Console.ForegroundColor = ConsoleColor.White;
+        WriteAt(left + 5, 17, "  .----.    Welcome! A little style goes a long way.");
+        WriteAt(left + 5, 18, "  |o  o|    I'm your office shopkeeper.");
+        WriteAt(left + 5, 19, "  | -- |    All boosts last for this game.");
+        WriteAt(left + 5, 20, " /|____|\\");
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        WriteAt(left, 21, new string('=', 70));
+        Console.ResetColor();
+        WriteAt(left, 22, shopMessage);
+        WriteAt(left, 23, "1-6 / arrows: Select | ENTER: Buy | S / ESC: Back to table");
+        DrawButton(ShopButtonX(), 15, "S");
     }
 
     static void DrawScene(
@@ -302,6 +439,7 @@ class Program
         // Draw all three cards. Highlight the currently selected card.
         for (int i = 0; i < cards.Length; i++)
         {
+            if (confirmed && i != selected) continue;
             if (i == selected)
                 Console.ForegroundColor = confirmed
                     ? ConsoleColor.Green
@@ -312,7 +450,7 @@ class Program
             DrawCardAt(
                 cards[i],
                 startX + i * CardSpace,
-                baseY,
+                baseY - (i == selected ? SelectionLift : 0),
                 CardWidth,
                 CardHeight
             );
@@ -324,14 +462,15 @@ class Program
             Console.SetCursorPosition(0, 14);
 
         DrawStatistics(
-            cash: 5000,
-            debt: 1200,
-            price: 25,
-            unitCost: 12,
-            inventory: 450,
-            share: 18
+            cash: cash,
+            debt: debt,
+            price: price,
+            unitCost: unitCost,
+            inventory: inventory,
+            share: share
         );
         DrawRerollCounter();
+        DrawButton(ShopButtonX(), 15, "S");
 
         // Three empty lines at the bottom
         Console.WriteLine();
@@ -343,9 +482,9 @@ class Program
             Math.Min(23, Console.BufferHeight - 1),
             confirmed
                 ? (rerolls > 0
-                    ? $"Selection confirmed | R: Reroll ({rerolls} left) | ESC: Exit"
-                    : "No rerolls left | ESC: Exit")
-                : "Arrows or 1-3: Select | ENTER: Confirm | ESC: Exit"
+                    ? $"Confirmed | R: Reroll ({rerolls}) | S: Shop | ESC: Exit"
+                    : "No rerolls left | S: Shop | ESC: Exit")
+                : $"1-3 / arrows: Select | ENTER: Play | SPACE: Clear | R: {rerolls} | S: Shop | ESC: Exit"
         );
     }
 
@@ -488,9 +627,18 @@ class Program
         int x = Math.Max(0, boardLeft - 7);
         int y = 15;
 
+        DrawButton(x, y, "R");
+        WriteAt(x, y + 3, $" x{rerolls} ");
+    }
+
+    static int ShopButtonX() => Math.Max(0, Math.Min(Console.WindowWidth - 6,
+        Math.Max(0, (Console.WindowWidth - 54) / 2) + 56));
+
+    static void DrawButton(int x, int y, string label)
+    {
         WriteAt(x, y, ",---,");
-        WriteAt(x, y + 1, "| " + rerolls + " |");
-        WriteAt(x, y + 2, "´---´");
+        WriteAt(x, y + 1, "| " + label + " |");
+        WriteAt(x, y + 2, "'---'");
     }
 
     static void DrawAnimatedCard(
@@ -630,6 +778,87 @@ class Program
 
         Console.SetCursorPosition(x, y);
         Console.Write(text);
+    }
+
+    // Console mouse input works on Windows; other terminals retain keyboard input.
+    sealed class GameInput : IDisposable
+    {
+        readonly IntPtr handle;
+        readonly uint originalMode;
+        readonly bool mouseEnabled;
+        bool leftDown;
+
+        public GameInput()
+        {
+            if (!OperatingSystem.IsWindows() || Console.IsInputRedirected) return;
+            handle = GetStdHandle(-10);
+            if (!GetConsoleMode(handle, out originalMode)) return;
+            // Enable mouse + extended flags, disable Quick Edit (which steals clicks).
+            mouseEnabled = SetConsoleMode(handle, (originalMode | 0x0010u | 0x0080u) & ~0x0040u);
+        }
+
+        public ConsoleKey ReadKey()
+        {
+            if (!mouseEnabled) return Console.ReadKey(true).Key;
+            while (true)
+            {
+                if (!ReadConsoleInputW(handle, out InputRecord record, 1, out uint count))
+                    return Console.ReadKey(true).Key;
+                if (count == 0) continue;
+                if (record.Type == 1 && record.KeyDown != 0)
+                    return (ConsoleKey)record.VirtualKey;
+                if (record.Type != 2) continue;
+                bool pressed = (record.Buttons & 1) != 0;
+                bool clicked = pressed && !leftDown && record.MouseFlags == 0;
+                leftDown = pressed;
+                if (!clicked) continue;
+                int x = record.MouseX - Console.WindowLeft;
+                int y = record.MouseY - Console.WindowTop;
+                if (Hit(x, y, ShopButtonX(), 15, 5, 3)) return ConsoleKey.S;
+                if (inShop)
+                {
+                    int left = Math.Max(0, (Console.WindowWidth - 72) / 2);
+                    for (int i = 0; i < ShopItems.Length; i++)
+                        if (Hit(x, y, left + i % 3 * 24, 2 + i / 3 * 7, 22, 6))
+                            return (ConsoleKey)((int)ConsoleKey.D1 + i);
+                }
+                else
+                {
+                    int boardLeft = Math.Max(0, (Console.WindowWidth - 54) / 2);
+                    if (Hit(x, y, Math.Max(0, boardLeft - 7), 15, 5, 3)) return ConsoleKey.R;
+                    int startX = Math.Max(0, (Console.WindowWidth - CardSpace * 3) / 2);
+                    for (int i = 0; i < 3; i++)
+                        if (Hit(x, y, startX + i * CardSpace, 0, CardSpace, CardHeight + SelectionLift))
+                            return (ConsoleKey)((int)ConsoleKey.D1 + i);
+                }
+            }
+        }
+
+        static bool Hit(int x, int y, int left, int top, int width, int height)
+            => x >= left && x < left + width && y >= top && y < top + height;
+
+        public void Dispose()
+        {
+            if (mouseEnabled) SetConsoleMode(handle, originalMode);
+        }
+
+        [StructLayout(LayoutKind.Explicit, Size = 20)]
+        struct InputRecord
+        {
+            [FieldOffset(0)] public ushort Type;
+            [FieldOffset(4)] public int KeyDown;
+            [FieldOffset(10)] public ushort VirtualKey;
+            [FieldOffset(4)] public short MouseX;
+            [FieldOffset(6)] public short MouseY;
+            [FieldOffset(8)] public uint Buttons;
+            [FieldOffset(16)] public uint MouseFlags;
+        }
+
+        [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int id);
+        [DllImport("kernel32.dll")] static extern bool GetConsoleMode(IntPtr handle, out uint mode);
+        [DllImport("kernel32.dll")] static extern bool SetConsoleMode(IntPtr handle, uint mode);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        static extern bool ReadConsoleInputW(IntPtr handle, out InputRecord record, uint length, out uint count);
     }
 
     // Your statistics drawing, kept as provided
