@@ -185,7 +185,7 @@ public sealed partial class GameApp
             8 => "Decorations start small. ENTER can buy the next upgrade tier.",
             _ => "SPACE leaves and starts next month. Stats and boosts carry over."
         };
-        int y = Screen is Screen.Table or Screen.Events ? 7 : Screen == Screen.Booster ? 6 : Screen == Screen.Shop ? 34 : 32;
+        int y = Screen is Screen.Table or Screen.Events ? 7 : Screen == Screen.Booster ? 6 : Screen == Screen.Shop ? 3 : 27;
         c.Wrapped(3, y, $"PRACTICE {tutorialStep}/9: {TutorialInstruction}", c.Width - 6, 1, ConsoleColor.Green);
         c.Wrapped(3, y + 1, meaning, c.Width - 6, 2, ConsoleColor.Yellow);
     }
@@ -193,7 +193,7 @@ public sealed partial class GameApp
     {
         Header(c, "TUTORIAL COMPLETE", "You ran a month and prepared the next one.");
         c.Wrapped(5, 7, "Look right: month two has a bigger quota, last month's actual earnings, and both your green and purple boosters. Your lamp also stays active.", c.Width - 10, 4, ConsoleColor.Green);
-        DrawStats(c);
+
         c.Wrapped(5, 14, "Clear twelve quotas to win, then choose Endless if you want more. Shop items have three normal tiers and two extra endless tiers. Targets grow 35% each endless month.", c.Width - 10, 4);
         c.Wrapped(5, 20, "Common cards show up often. Uncommon, Rare, Epic and Legendary cards appear less often. Rarer is exciting, but read the cost before playing.", c.Width - 10, 4);
         c.Wrapped(5, 24, "I opens the full card explanation. Click a side-panel booster to inspect it. Page Up/Down scrolls long booster lists. ESC pauses; Space clears a selection.", c.Width - 10, 4);

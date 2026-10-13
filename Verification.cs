@@ -5,7 +5,14 @@ public static class Verification
     static int assertions;
     static void Check(bool okay, string message)
     { assertions++; if (!okay) throw new InvalidOperationException("Verification failed: " + message); }
-    static void Key(GameApp app, ConsoleKey key) => app.Handle(new(key), app.Render(120, 42));
+    static void Key(GameApp app, ConsoleKey key) {
+        app.Handle(new(key), app.Render(120, 42));
+        if (app.Game != null)
+        {
+            string[] lines = app.Render(120, 42).Lines();
+            Check(lines[33].Contains(new string('_', 48)) && lines[35].Contains("CASH:") && lines[37].Contains("INVENTORY:"), "persistent bottom desk on " + app.Screen);
+        }
+    }
 
     public static void SelfTest(List<Course> courses)
     {
@@ -142,11 +149,11 @@ public static class Verification
         Canvas selected = app.Render(108, 40);
         Check(selected.Lines()[10][3] == '+' && selected.Lines()[12].Count(c => c == '+') == 4, "two-row selection lift");
         Check(selected.Lines().Any(line => line.Contains("Shout louder")), "funny card explanation visible");
-        Check(selected.Lines()[28].Contains(new string('_', 48)) && selected.Lines()[30].Contains("CASH:"), "old statistics desk restored");
+        Check(selected.Lines()[31].Contains(new string('_', 48)) && selected.Lines()[33].Contains("CASH:"), "old statistics desk restored");
         foreach (Canvas source in new[] { selected, app.Render(200, 60) })
         {
             List<AnimationFrame> frames = CardAnimation.Build(source);
-            Check(frames.Count == 22 && frames.Sum(f => f.Delay) == 995, "original animation frame counts and timing");
+            Check(frames.Count == 22 && frames.Sum(f => f.Delay) == 796, "animation playback is 25 percent faster");
             Check(frames.Take(12).All(f => f.Stage == AnimationStage.Horizontal) && frames[11].CardWidth == 5,
                 "horizontal shrink ends at five columns");
             Check(frames.Skip(12).Take(5).All(f => f.Stage == AnimationStage.Vertical) && frames[16].CardHeight == 1,
@@ -157,6 +164,17 @@ public static class Verification
             Check(frames[^1].Canvas.Lines().Skip(card.Y).Take(card.Height).All(line => line.Substring(card.X, card.Width).Trim().Length == 0),
                 "animation clears all traces of the card");
             Check(frames.All(f => f.Canvas.Lines()[1] == source.Lines()[1]), "animation preserves the rest of the screen");
+            List<AnimationFrame> suction = CardAnimation.Build(source, 0);
+            int dotY = card.Y - 3, center = card.X + card.Width / 2;
+            Check(suction[16].Canvas.Lines()[dotY][center] == '.', "selected card reaches dot three rows above its top");
+            Check(suction[17].Canvas.Lines()[dotY][center] == '*', "selected star burst occurs at suction dot");
+            Check(suction[17].Canvas.Lines()[card.Y + card.Height / 2][center] == ' ', "selected card does not collapse at its old center");
+            Check(suction[^1].Canvas.Lines().Skip(card.Y).Take(card.Height).All(line => line.Substring(card.X, card.Width).Trim().Length == 0), "suction leaves no card ghost");
+            HitBox other = source.Buttons.First(b => b.Action == "select" && b.Index != 0);
+            Check(suction[17].Canvas.Lines()[other.Y + other.Height / 2][other.X + other.Width / 2] == '*', "only unselected cards collapse at their centers");
+            Check(suction.All(f => f.Areas.Any(a => a.Y <= dotY - 1 && a.X == card.X)), "redraw includes the upper flight path and star");
+            int deskY = source.Lines().Select((line, y) => (line, y)).First(pair => pair.line.Contains(new string('_', 48))).y;
+            Check(suction.All(f => f.Canvas.Lines()[deskY + 2] == source.Lines()[deskY + 2]), "desk stays visible throughout animation");
         }
         Key(app, ConsoleKey.I); Check(app.Screen == Screen.Inspect, "full card explanation");
         Key(app, ConsoleKey.Escape); Check(app.Screen == Screen.Table, "inspection preserves selection");
@@ -394,6 +412,9 @@ public static class Verification
             File.WriteAllLines(Path.Combine(directory, name + "-108.txt"), app.Render(108, 40).Lines());
         }
         capture("01-main"); Key(app, ConsoleKey.T); capture("02-learning-guide"); Key(app, ConsoleKey.Enter); capture("02-tutorial-intro"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("03-cards-and-desk");
+        var flight = CardAnimation.Build(app.Render(120, 42), 0);
+        foreach (int i in new[] { 0, 7, 12, 16, 19, 21 })
+            File.WriteAllLines(Path.Combine(directory, $"03-flight-{i:00}.txt"), flight[i].Canvas.Lines());
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.R); Key(app, ConsoleKey.E); capture("04-events"); Key(app, ConsoleKey.E); capture("05-report");
         Key(app, ConsoleKey.Enter); capture("06-company-news"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("07-boosters");
         Key(app, ConsoleKey.Enter); capture("08-shop-and-side-menu"); Key(app, ConsoleKey.D2); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Spacebar); capture("09-tutorial-complete");

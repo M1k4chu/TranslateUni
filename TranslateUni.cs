@@ -141,6 +141,7 @@ public sealed partial class GameApp
         if (notice.Length > 0) c.Text(3, height - 3, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
         else if (storage.Notice.Length > 0) c.Text(3, height - 3, storage.Notice, ConsoleColor.Yellow);
         if (Game == null) return c;
+        DrawStats(c); // Persistent desk, shared by every screen in an active run.
         DrawTutorialHint(c);
         var combined = new Canvas(width, height);
         combined.Paste(c, 0, 0);
@@ -149,7 +150,7 @@ public sealed partial class GameApp
     }
     public void Handle(Input input, Canvas frame)
     {
-        inputFrame = frame; animationSource = null;
+        inputFrame = frame; animationSource = null; animationSelected = -1;
         notice = "";
         if (input.X >= 0)
         {
@@ -276,7 +277,7 @@ public sealed partial class GameApp
                     Phase.Decisions => Game.Play(selected), Phase.Events => Game.TakeEvent(selected),
                     Phase.Booster => Game.ClaimBooster(selected), _ => false
                 };
-                if (played) { animationSource = inputFrame; selected = -1; SyncScreen(); }
+                if (played) { animationSource = inputFrame; animationSelected = selected; selected = -1; SyncScreen(); }
                 break;
             case "reroll":
                 if (Game?.Reroll() == true) { animationSource = inputFrame; selected = -1; }
@@ -462,11 +463,10 @@ public sealed partial class GameApp
             Rarity rarity = events ? g.Events[i].Rarity : g.Hand[i].Rarity;
             DrawCard(c, i, name, flavor, lines, rarity, i == selected, events ? ConsoleColor.Magenta : ConsoleColor.Cyan);
         }
-        DrawStats(c);
-        c.Button(3, 30, $"R {g.Rerolls}", "reroll");
-        c.Button(c.Width - 10, 30, "B", "lockedShop");
-        c.Button(3, 35, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
-        c.Button(28, 35, events ? "ENTER TAKE" : "ENTER PLAY", "play");
+        c.Button(3, 28, $"R {g.Rerolls}", "reroll");
+        c.Button(c.Width - 10, 28, "B", "lockedShop");
+        c.Button(3, 29, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
+        c.Button(28, 29, events ? "ENTER TAKE" : "ENTER PLAY", "play");
         c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
         Footer(c, "WASD/1-3: Select | ENTER: Play | E: Skip | I: Details | ESC: Pause");
     }
@@ -488,17 +488,18 @@ public sealed partial class GameApp
     {
         Run g = Game!;
         const int baseColumnWidth = 24;
-        c.Text(Math.Max(0, (c.Width - 48) / 2), 28, new string('_', 48), ConsoleColor.DarkYellow);
+        int top = c.Height - 9;
+        c.Text(Math.Max(0, (c.Width - 48) / 2), top, new string('_', 48), ConsoleColor.DarkYellow);
         string[] left = ["", $"  CASH: ${g.Cash:N2}", $"   PRICE: ${g.Price:N2}", $"    INVENTORY: {g.Inventory:N0}"];
         string[] right = ["", $"DEBT: ${g.Debt:N2}", $"UNIT COST: ${g.UnitCost:N2}", $"SHARE: {g.Share:N1}%"];
         for (int i = 0; i < 4; i++)
         {
             int columnWidth = baseColumnWidth + i;
             string clip(string value) => value.Length > columnWidth ? value[..columnWidth] : value.PadRight(columnWidth);
-            c.Text(Math.Max(0, (c.Width - 2 - columnWidth * 2) / 2), 29 + i,
+            c.Text(Math.Max(0, (c.Width - 2 - columnWidth * 2) / 2), top + 1 + i,
                 "/" + clip(left[i]) + clip(right[i]) + "\\", ConsoleColor.White);
         }
-        c.Center(33, $"Capacity {g.Capacity} | Quality {g.Quality:F0} | Risk {g.Risk:F0} | Service {g.Preview().Service:F0}%");
+        c.Center(top + 5, $"Capacity {g.Capacity} | Quality {g.Quality:F0} | Risk {g.Risk:F0} | Service {g.Preview().Service:F0}%");
     }
     void DrawResult(Canvas c)
     {
@@ -562,14 +563,14 @@ public sealed partial class GameApp
             c.Text(x, y + 10, "======================", ConsoleColor.DarkYellow);
             c.Buttons.Add(new(x, y, 22, 10, "shopSelect", i));
         }
-        c.Text(left + 2, 28, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
-        c.Text(left + 2, 29, "  |o  o|    Choose a decoration, then ENTER to buy.");
-        c.Text(left + 2, 30, " /| -- |\\   New month, same helpful office!");
-        c.Rule(31, ConsoleColor.DarkYellow);
-        c.Button(left, 32, "ENTER BUY", "buy", shopIndex);
-        c.Button(left + 19, 32, "B BACK", "shopBack");
-        c.Button(left + 34, 32, "SPACE LEAVE SHOP", "next");
-        if (!g.Tutorial) c.Button(left, 34, $"R REROLL SHOP ${g.ShopRerollCost}", "shopReroll");
+        c.Text(left + 2, 27, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
+        c.Text(left + 2, 28, "  |o  o|    Choose a decoration, then ENTER to buy.");
+        c.Text(left + 2, 29, " /| -- |\\   New month, same helpful office!");
+
+        c.Button(left, 30, "ENTER BUY", "buy", shopIndex);
+        c.Button(left + 19, 30, "B BACK", "shopBack");
+        c.Button(left + 34, 30, "SPACE LEAVE SHOP", "next");
+        if (!g.Tutorial) c.Button(c.Width - 16, 27, $"R ${g.ShopRerollCost}", "shopReroll");
         c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
         Footer(c, "WASD/1-6: Select | ENTER: Buy | R: Reroll | SPACE: Next month");
     }

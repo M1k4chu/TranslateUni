@@ -97,3 +97,10 @@ Startup checks the operating system, process architecture, all monitor pixel dim
 Start with StartGame.cmd. To check compatibility without starting the game, run DiagnoseDisplay.cmd. The report is saved beside the executable in data/display-diagnostics.txt (normally play/data/display-diagnostics.txt). The --fullscreen-test argument briefly tests fullscreen and exits; --windowed disables automatic fullscreen. Monitor sizes are measured in pixels, not physical inches. On non-Windows systems, use the terminal's own fullscreen control.
 
 Validated on Windows 10 build 19045 with three 1920x1080 monitors at 100% scaling: a dedicated console entered fullscreen, reported mode flag 1, and had bounds (0,0)-(1920,1080). The game regression suite passed all 4377 checks. Windows Terminal and other operating systems were not available for live fullscreen testing.
+
+## Animation and statistics update (v5.2)
+Animation playback is 25% faster: 22 frames now total 796ms instead of 995ms. Playing a decision, event or booster makes the chosen card taper and curve upward into a dot three rows above its raised top edge, then burst into a star. Only the unchosen cards use horizontal shrink and vertical collapse. Rerolling or skipping collapses all discarded cards.
+
+The original statistics desk is anchored lower in the gameplay area and stays visible on every active-run screen, including results, company news, boosters, shop, pause and inspection. Controls are positioned above the desk. The fullscreen compatibility changes from v5.1 are included.
+
+Validation: Release build with no warnings; all 4471 checks passed, including selected-card flight, animation cleanup, enlarged redraw region, persistent statistics and the full campaign suite. Text-frame previews inspected at 108x40 and 120x42.
