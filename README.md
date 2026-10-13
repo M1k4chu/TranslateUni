@@ -90,3 +90,10 @@ dotnet run --project TranslateUni.csproj -- --preview
 Checks cover the animation's original three stages and timing, fullscreen-size rendering, all 20 families and five tier definitions, upgrade prices and effect replacement, normal/endless tier limits, victory unlocks, month-13 progression, compounded quotas, continued company events, and saved endless results. All **180 course/topic/difficulty combinations** have a verified normal victory path. The endless sample clears additional quotas and ends naturally when its growing targets exceed the company's results.
 
 Keep `course-data.json` with the project when rebuilding; it is embedded into the executable.
+
+## Fullscreen compatibility update (v5.1)
+Startup checks the operating system, process architecture, all monitor pixel dimensions and positions, work areas, DPI scaling, terminal host and console grid. Classic consoles use their own fullscreen command when the old display-mode API is unavailable. Embedded terminals open a dedicated console when Windows Terminal is unavailable. The game does not resize the console after entering fullscreen. Font size is reduced on small classic-console displays when needed to fit the game.
+
+Start with StartGame.cmd. To check compatibility without starting the game, run DiagnoseDisplay.cmd. The report is saved beside the executable in data/display-diagnostics.txt (normally play/data/display-diagnostics.txt). The --fullscreen-test argument briefly tests fullscreen and exits; --windowed disables automatic fullscreen. Monitor sizes are measured in pixels, not physical inches. On non-Windows systems, use the terminal's own fullscreen control.
+
+Validated on Windows 10 build 19045 with three 1920x1080 monitors at 100% scaling: a dedicated console entered fullscreen, reported mode flag 1, and had bounds (0,0)-(1920,1080). The game regression suite passed all 4377 checks. Windows Terminal and other operating systems were not available for live fullscreen testing.

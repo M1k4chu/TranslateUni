@@ -12,15 +12,36 @@ public static class Program
             List<Course> courses = Catalog.Load();
             if (args.Contains("--self-test")) { Verification.SelfTest(courses); return 0; }
             if (args.Contains("--preview")) { Verification.Preview(courses); return 0; }
+            DisplayDiagnostics.Capture();
+            if (args.Contains("--diagnose-display"))
+            {
+                DisplayDiagnostics.Save();
+                Console.WriteLine(DisplayDiagnostics.Capture());
+                Console.WriteLine("Report: " + DisplayDiagnostics.ReportPath);
+                return 0;
+            }
+            if (args.Contains("--fullscreen-test"))
+            {
+                if (FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
+                using var testFullscreen = new ConsoleFullscreen(args.Contains("--windowed") || args.Contains("--host-fullscreen"));
+                DisplayDiagnostics.LogConsoleSize();
+                DisplayDiagnostics.Save();
+                FullscreenLauncher.Acknowledge(args, testFullscreen.Applied || args.Contains("--host-fullscreen"));
+                return testFullscreen.Applied ? 0 : 1;
+            }
             if (Console.IsInputRedirected || Console.IsOutputRedirected)
             { Console.WriteLine("Run this game in an interactive terminal, or use --self-test."); return 1; }
             if (FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
             using var fullscreen = new ConsoleFullscreen(args.Contains("--windowed") || args.Contains("--host-fullscreen"));
-            TryResize();
+            // Resizing after entering fullscreen can switch a classic console back to windowed mode.
+            if (!fullscreen.Applied && !args.Contains("--host-fullscreen")) TryResize();
+            DisplayDiagnostics.LogConsoleSize();
+            DisplayDiagnostics.Save();
             using var input = new TerminalInput();
             Console.Title = "TranslateUni";
             var app = new GameApp(courses, new Storage());
             Console.Clear();
+            FullscreenLauncher.Acknowledge(args, true);
             while (!app.Quit)
             {
                 int width = Console.WindowWidth, height = Console.WindowHeight;
@@ -40,7 +61,7 @@ public static class Program
             return 0;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Text.Json.JsonException)
-        { Console.WriteLine("The game could not start: " + ex.Message); return 1; }
+        { FullscreenLauncher.Acknowledge(args, false); DisplayDiagnostics.Add("Startup error: " + ex.Message); DisplayDiagnostics.Save(); Console.WriteLine("The game could not start: " + ex.Message); return 1; }
     }
     static void TryResize()
     {
