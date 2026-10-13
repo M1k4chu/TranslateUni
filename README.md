@@ -1,3 +1,22 @@
+# TranslateUni - the business learning game
+
+<img width="1098" height="739" alt="image" src="https://github.com/user-attachments/assets/0659579d-9aa9-4707-9909-49a44d3f0a8e" />
+<img width="1406" height="761" alt="image" src="https://github.com/user-attachments/assets/47fe9227-0479-4319-b848-7ae9d71370a0" />
+
+**TranslateUni** is a business strategy card game where every round is one month. Choose decisions, react to events, and build your company’s stats to meet each month’s quota. After each month, pick a booster and visit the shop for upgrades. Clear 12 quotas to win—if your business can keep up.
+
+**Controls**
+
+- **WASD / arrow keys** or **1–3**: Select a card
+- **Enter**: Play or confirm
+- **R**: Reroll
+- **E**: Skip optional choices or end decisions
+- **Space**: Finish shopping and advance
+- **L**: Open loans; **P**: Repay
+- **I**: View card details
+- **Esc**: Pause or go back
+- **Multiplayer:** **N** votes no; **V** abstains.
+
 # TranslateUni v6.6
 
 This repository contains the latest v6.6 source and the chronological history of 21 saved versions. See [HISTORY.md](HISTORY.md) for the tags and [PUBLISH-GITHUB.md](PUBLISH-GITHUB.md) to upload it. Windows 10 and 11 are supported. Install the .NET 8 SDK and run StartGame.cmd, or open TranslateUni.sln in Visual Studio. Compiled builds are excluded from Git; the launcher builds from source when needed.
