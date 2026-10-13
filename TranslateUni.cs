@@ -44,32 +44,39 @@ public static class Program
             if (args.Contains("--fullscreen-test"))
             {
                 if (FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
+                using var terminalCheck=new TerminalFullscreen(args);
                 using var testFullscreen = new ConsoleFullscreen(args.Contains("--windowed") || args.Contains("--host-fullscreen"));
                 DisplayDiagnostics.LogConsoleSize();
                 DisplayDiagnostics.Save();
-                FullscreenLauncher.Acknowledge(args, testFullscreen.Applied || args.Contains("--host-fullscreen"));
-                return testFullscreen.Applied ? 0 : 1;
+                bool confirmed=testFullscreen.Applied||terminalCheck.Applied;
+                FullscreenLauncher.Acknowledge(args,confirmed);
+                return confirmed ? 0 : 1;
             }
+            if (FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
             if (Console.IsInputRedirected || Console.IsOutputRedirected)
             { Console.WriteLine("Run this game in an interactive terminal, or use --self-test."); return 1; }
-            if (FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
+            using var terminalFullscreen=new TerminalFullscreen(args);
             using var fullscreen = new ConsoleFullscreen(args.Contains("--windowed") || args.Contains("--host-fullscreen"));
+            bool verified=fullscreen.Applied||terminalFullscreen.Applied||args.Contains("--windowed");
+            if(!verified&&FullscreenLauncher.RelaunchIfAvailable(args,true))return 0;
+            if(!verified&&args.Any(a=>a.StartsWith("--display-handshake="))){DisplayDiagnostics.Save();FullscreenLauncher.Acknowledge(args,false);return 1;}
             // Resizing after entering fullscreen can switch a classic console back to windowed mode.
             if (!fullscreen.Applied && !args.Contains("--host-fullscreen")) TryResize();
             DisplayDiagnostics.LogConsoleSize();
             DisplayDiagnostics.Save();
             using var input = new TerminalInput();
             using var theme = new TerminalTheme();
-            Console.Title = "TranslateUni";
+            Console.Title = args.FirstOrDefault(a=>a.StartsWith("--display-window-title="))?["--display-window-title=".Length..]??"TranslateUni";
             var app = new GameApp(courses, new Storage());
             Console.Clear();
-            FullscreenLauncher.Acknowledge(args, true);
+            FullscreenLauncher.Acknowledge(args, verified);
             while (!app.Quit)
             {
                 int width = Console.WindowWidth, height = Console.WindowHeight;
                 Canvas frame = app.Render(width, height);
                 try { frame.Flush(); }
                 catch (ArgumentOutOfRangeException) { continue; } // The window was resized during drawing.
+                if(app.NetworkRequested){LanMultiplayer.Open(courses,app.SelectedMode,app.PlayerProfile!,input);app.FinishNetwork();input.DiscardPending();continue;}
                 Input next = input.Read();
                 if (width < 108 || height < 42)
                 {
@@ -84,7 +91,7 @@ public static class Program
             Console.Clear();
             return 0;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Text.Json.JsonException or System.Security.Cryptography.CryptographicException or System.Security.Authentication.AuthenticationException)
         { FullscreenLauncher.Acknowledge(args, false); DisplayDiagnostics.Add("Startup error: " + ex.Message); DisplayDiagnostics.Save(); Console.WriteLine("The game could not start: " + ex.Message); return 1; }
     }
     static void TryResize()
@@ -102,7 +109,7 @@ public static class Program
     }
 }
 
-public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, SpecialEvent, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing, Inspect, TutorialIntro, TutorialComplete, Loans, CourseComparison }
+public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, SpecialEvent, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing, Inspect, TutorialIntro, TutorialComplete, Loans, CourseComparison, Modes, PlayerSetup }
 
 public sealed partial class GameApp
 {
@@ -121,11 +128,11 @@ public sealed partial class GameApp
     { this.courses = courses; this.storage = storage; difficultyIndex = (int)storage.Preferences.Difficulty; }
     public void Exit() => Quit = true;
 
-    public Canvas Render(int width, int height)
+    Canvas RenderCore(int width, int height)
     {
         if (width > 140 || height > 46)
         {
-            Canvas core = Render(Math.Min(140, width), Math.Min(46, height));
+            Canvas core = RenderCore(Math.Min(140, width), Math.Min(46, height));
             var fullscreen = new Canvas(width, height);
             fullscreen.Paste(core, (width - core.Width) / 2, (height - core.Height) / 2);
             return fullscreen;
@@ -141,6 +148,8 @@ public sealed partial class GameApp
         switch (Screen)
         {
             case Screen.Main: DrawMain(c); break;
+            case Screen.Modes: DrawModes(c); break;
+            case Screen.PlayerSetup: DrawPlayerSetup(c); break;
             case Screen.Courses: DrawCourses(c); break;
             case Screen.CourseComparison: DrawCourseComparison(c); break;
             case Screen.Topics: DrawTopics(c); break;
@@ -198,8 +207,10 @@ public sealed partial class GameApp
     }
     void HandleCore(Input input, Canvas frame)
     {
-        inputFrame = frame; animationSource = null; animationSelected = -1;
+        inputFrame = frame;
+        animationSource = null; animationSelected = -1;
         notice = "";
+        if(HandlePlayerSetup(input))return;
         if (input.X >= 0)
         {
             HitBox? hit = frame.Buttons.LastOrDefault(b => input.X >= b.X && input.X < b.X + b.Width && input.Y >= b.Y && input.Y < b.Y + b.Height);
@@ -314,7 +325,7 @@ public sealed partial class GameApp
                 menuIndex = index;
                 switch (index)
                 {
-                    case 0: browsing = false; Screen = Screen.Courses; break;
+                    case 0: browsing = false; Screen = Screen.Modes; break;
                     case 1: courseIndex = topicIndex = 0; difficultyIndex = (int)Difficulty.Easy; StartRun(); break;
                     case 2: browsing = true; Screen = Screen.Courses; break;
                     case 3: Screen = Screen.History; break;
@@ -630,7 +641,7 @@ public sealed partial class GameApp
             : $"{g.Cleared}/12 months cleared", won ? ConsoleColor.Green : ConsoleColor.Red);
         c.Center(10, $"{g.Difficulty} | Total operating profit ${g.Reports.Sum(r => r.Profit):N0}");
         c.Center(12, $"Cash ${g.Cash:N0} | Decorations {g.Owned.Count} | Boosters {g.ActiveBoosts.Count}");
-        if (!won) c.Center(15, "Missed: " + string.Join(", ", g.LastReport!.Failures));
+        if (!won) c.Center(15, "Missed: " + (g.LastReport==null?"Company disconnected":string.Join(", ", g.LastReport.Failures)));
         if (won && !g.Endless)
         {
             c.Center(15, "ENDLESS: +35% quota per month; diamond and cosmic upgrades", ConsoleColor.Magenta);

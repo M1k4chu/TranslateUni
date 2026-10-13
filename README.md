@@ -1,173 +1,60 @@
-# TranslateUni v5.7
+# TranslateUni v6.0
 
-Run StartGame.cmd. In the Course Library, press C or click COMPARE COURSES to see how each course changes focus-card effects, stock costs, topic mechanics and learning themes beyond its quotas.
+Extract this folder and run StartGame.cmd. Windows 10 and 11 are supported; the .NET 8 runtime is required. A compiled build is included in play/. Open TranslateUni.sln to edit the source.
 
-- Difficulty labels now say difficulty throughout the game and guide.
-- Tutorial instructions clear the old message before drawing, preventing leftover characters. Event controls correctly say Take / Leave.
-- Paid Factory, Warehouse, Express and Emergency Shipment cards now describe their stock as part of the purchase, without calling it free. The paid calendar also no longer advertises free boxes. Genuinely free rewards retain their wording.
-- Repay Debt is eligible only when a loan balance exists. When the balance is cleared, repayment cards already in the decision hand are replaced without spending an action or reroll.
-- The non-working Loan Desk decision card was removed. The established L loan screen remains available for borrowing, repayment and cooldown tracking.
-- Office overhead savings now reduce the actual monthly charge down to $0, replacing the previous $60 minimum. Permanent upgrades, boosters and next-month tax relief stack; temporary relief expires after its month. Results show the net overhead charge and the base-minus-savings calculation without counting the reduction twice. Buying an overhead upgrade reports the new monthly charge.
+## Play modes
 
-Validation: Release build without warnings; 7567 checks passed. The full campaign suite covered all 180 course/topic/difficulty combinations; 179 won on their first seed and one required seeded retries. Added checks cover eligible card pools, stale repayment removal, paid-card wording, tutorial text replacement, permanent/temporary/booster overhead reductions, exact profit reconciliation and library navigation. Rendered tutorial and course-comparison screens were visually inspected at 108x42.
+Student / Team PLAY now opens Singleplayer, CO-OP, Rivalry (2 player), or Rivalry CO-OP. Enter a name and choose one of six exact 4 x 4 ASCII avatars. Singleplayer continues to the usual course, topic and difficulty selection.
 
----
-# TranslateUni v5.6
+Multiplayer works between separate computers. Each player runs this version of the game. Choose the same multiplayer mode before connecting. TAB switches between Host and Join; F6 switches between LAN and Online.
 
-Run StartGame.cmd. All previous gameplay, fullscreen, shop, loan and input-queue fixes are included.
+- CO-OP: 2-8 players share one company and vote on decisions, optional events, boosters, shop purchases, rerolls, loans, repayments and advancing to the next month.
+- Rivalry: two players each run an independent company, starting with the same course, topic, difficulty and random seed.
+- Rivalry CO-OP: two competing companies, each controlled by a voting team of 1-4 players. The host sets Team 1's count with F4. The first player joining Team 2 sets that team's count with F4 before joining. Host F5 provides an initial Team 2 count; the joining captain can override it. Teams may have different counts.
 
-The palette is slightly brighter and more colorful. The controls row and messages have moved down two rows, and the statistics panel is two rows lower again. The minimum playable terminal is now 108x42: controls at row 32, messages at 33, stat changes at 34, bars at 36-38, labels at 39, amounts at 40 and the bottom divider at 41.
+The host selects the course (F1), topic (F2) and difficulty (F3). In the lobby, ENTER starts the match after all chosen slots are filled. Player names must be unique. Rivalry guests join Team 2; Rivalry CO-OP guests choose their team with F5. CO-OP guests join the shared team.
 
-The monthly result is now a receipt-style calculation with numbered entries and exact amounts: sales quantity multiplied by price, per-sale boosts, production cost, unit-cost improvements, supplier/event effects, carbon charges, office overhead, overhead savings, individual decision expenses, event grants, debt event charges, stock holding costs and passive income. Zero optional entries are omitted. The total reconciles exactly with the reported profit, including a rounding entry when needed. The breakdown is captured before monthly inventory is deducted, so returning to a report cannot change its calculation. Loan principal and the $200 clear reward remain separate from operating profit.
+## LAN connection
 
-Result lines print one by one, followed by the total and profit quota. Long statements have pages; PgUp/PgDn print the previous or next page. Actual values for every quota appear below the receipt. A loan bridge is identified separately when it covered a profit shortfall.
+On one computer choose Host and press ENTER. Its lobby shows local IP addresses and TCP port 45873. On each other computer choose Join, type the host's LAN IP or DNS name, and press ENTER. Allow TranslateUni through Windows Firewall for the network being used if Windows asks. No router forwarding is needed between computers on the same local network.
 
-Changed statistics count toward their new values and briefly pulse. Each animation takes 300ms and works for decisions, events, purchases, loans, repayments and month transitions. Statistics also animate alongside the result printing. Animations only change the display, never the game state. Queued input is cleared after feedback finishes.
+## Online connection: the host PC is the server
 
-Validation: Release build without warnings; 6403 passing checks, including 180 full campaigns, reconciled statements across every course, captured inventory, actual expense/event lines, stat animation endpoints, increase/decrease direction, one-time feedback, result printing and multi-page statements. Native Windows input and palette checks also passed. Rendered result, printing and shop previews were inspected at 108x42.
+1. Host: press F6 for Online. Type your public IP address, DNS name, or shared VPN address. An optional :port changes the server's listening port; otherwise it uses TCP 45873. Select course/topic/difficulty and team counts, then press ENTER.
+2. For direct internet hosting, forward that TCP port on your router to the host PC's local IP and allow inbound connections to the game in Windows Firewall. Keep the host PC and game running. IPv4 and IPv6/DNS endpoints are supported. IPv6 typically needs an inbound firewall allowance rather than IPv4 NAT forwarding.
+3. The lobby displays a translateuni:// invite code. F9 saves the complete code to play/data/online-invite.txt in the compiled build. Share that code with your players.
+4. Guests: select the matching mode, switch to Online with F6 and Join with TAB, and paste the entire invite code. In Windows Terminal use Ctrl+Shift+V; in a classic console use Ctrl+V. Choose the joining team and any captain's team count, then press ENTER.
+5. The host presses ENTER when the lobby is full.
 
----
-# TranslateUni v5.5
+Connections use managed TLS 1.2 with ECDHE and AES-GCM. The invitation pins the host's SHA-256 certificate fingerprint and contains a random room secret. A new host session creates a new invitation. Credentials stay in memory; nothing is installed in Windows certificate or key stores. Bouncy Castle 2.7.0 and its MIT license are included.
 
-Run StartGame.cmd. This update includes all previous game content and loan rules.
+There is no central server or relay. The game cannot bypass your router, ISP carrier-grade NAT, a blocked inbound port, or an unreachable public address. If direct port forwarding is unavailable, put the players on a shared VPN and use the host's VPN address. A private home-network IP alone is not reachable from another household. The game does not change router or firewall settings automatically.
 
-- The complete statistics board is two rows lower: changes at row 32, an empty row at 33, bars at 34-36, names at 37 and amounts at 38. At the 108x40 minimum layout, controls and messages now sit above the panel so nothing overlaps. Click a bar for its explanation.
-- Animations play at 80% of the previous speed (20% slower). Discards take about 498ms; selected-card movement, suction and star animation take 1250ms. The selected card still waits for the others to disappear before moving. The lowered suction point is preserved.
-- All statistic names and associated values use consistent colors across cards, quotas, messages, shop boosts, loan text and the statistics board. The game uses a softer RGB palette. The classic Windows console receives a temporary muted palette, which is restored on exit; terminal settings are not permanently changed.
-- Shop selections use a muted purple accent and a three-row SELECTED box on the shelf strip. Unselected items use teal, and completed upgrades use muted green.
-- Pending Windows keyboard/mouse input is discarded after screen changes, card animations, rerolls, shop purchases and loan transactions. Held keys must be released before they can activate the next screen.
-- After taking a loan, the loan desk stays open and shows the amount still owed and an ENTER/P PAY BACK button. Partial repayment leaves the remaining balance visible. After full repayment, the desk shows the months until the next available loan; offers return when the three-month cooldown expires. ESC returns to the previous gameplay screen.
+## Timers, votes and standings
 
-Validation: Release build without warnings; 6277 passing checks, including 180 complete campaigns. A native Windows console test verified removal of queued Enter/number repeats and application of the muted console palette. Rendered shop, repayment, cooldown and minimum-size statistics previews were inspected.
+The decision phase lasts at most 3 minutes. A company that finishes early waits for the other company before playing its optional events. When both companies finish, they advance immediately. The shared 2-minute shop clock starts when the first company reaches the shop. Both companies can finish early by choosing SPACE. When the shop clock expires, outstanding event/results/news/booster screens advance with optional choices skipped, and the next month starts for surviving companies.
 
-Optional compatibility checks: DiagnoseDisplay.cmd or StartGame.cmd --terminal-self-test. Reports are saved beside the executable under data/.
+In a voting team, the first vote starts a 20-second countdown. Players may change their vote during that window. Once all connected teammates vote, the result resolves early. The choice with the most votes wins; abstentions do not count. A tie opens a 10-second revote restricted to the tied choices. A second tie skips the choice. E votes to skip decisions/events/boosters or reject a shop purchase. SPACE votes to finish shopping. Required result/news screens use ENTER to continue.
 
----
-# TranslateUni v5.4
+Each player's assigned color, avatar, current vote, last settled month's profit and total operating profit appear on the left. CO-OP teammates display their shared company's profit. F7/F8 page through longer player lists. Quotas, booster cards and the statistics board stay on the right/bottom. Timers appear below the left player list so shop prices and card animations stay clear.
 
-Run StartGame.cmd. Press L during a run to open the loan desk; choose with WASD/1-3 and ENTER. P pays as much of the balance as available cash allows. Click any statistics bar for its explanation and scale.
+Rivalry standings rank quotas cleared first, then total operating profit; equal results are a tie. After the year finishes, teams that cleared all 12 quotas may vote with E to continue into endless mode. All connected eligible teams must agree before continuing together. Endless preserves rapidly rising quotas and unlocks decoration tiers 4-5. SPACE can vote against an endless choice. Q leaves a multiplayer session; when the host leaves, the server closes. If a team loses every connected player, it forfeits. Mid-match reconnection is not supported; disconnected lobby slots can be replaced before starting.
 
-Unchosen cards disappear in 398ms, then the selected card moves to the middle and performs its suction/star animation in exactly 1000ms of scheduled playback. Its dot is now two rows above the centered card, one row lower than before. The 1.5-second hold has been removed. Rendering time counts toward playback deadlines.
+## Existing gameplay and controls
 
-Loans offer roughly 1x / 2x / 3x emergency funding with roughly 50% / 100% / 150% fixed interest fees; both amounts and rates vary by 5-10%. The amount scales to the current money shortfall. The card shows cash received, fee and total repayment before borrowing. New runs start without a loan. A remaining balance blocks all further loans; fully clearing the balance starts a three-month cooldown. Repayment cards, refinancing and debt-reducing upgrades also count when they clear the balance. Equity events and crowdfunding no longer create loans outside these rules.
+All six courses, 60 topics, three difficulties, 12 monthly quotas, guided tutorial/learning guide, course comparison library, events, company headlines, boosters, 20 upgrade families, loans, profit calculations, statistic feedback and card animations are retained. Loan stacking remains disabled; the three-month cooldown starts after the previous debt is fully repaid. Singleplayer history/settings continue to save locally; multiplayer results are shown in the live standings.
 
-A result-screen loan can bridge a missed profit/cash/solvency quota. Bridge funding is spent to cover the profit shortfall and recorded separately from real earnings. Quality, service, risk, share and debt quotas still apply. An unaffordable or quota-breaking bridge is rejected. Borrowing does not increase sales profit. The interest fee is included once in the debt balance; imported interest-shock events can still charge a monthly expense.
+WASD/arrows or 1-3 select cards; ENTER plays/takes/claims. R rerolls; E ends decisions or leaves optional cards. Shop: WASD/1-6 select, ENTER buys, R refreshes, SPACE finishes. L opens borrowing/repayment; P repays. I shows card information; click statistic bars for explanations. PgUp/PgDn page calculations or boosters. ESC pauses or returns to the previous panel. Multiplayer clocks continue while a player views information or pauses.
 
-All ten statistics now have separate colored vertical bars. Changes compare with the month start and appear two rows above the bars, with one empty row in between. Bars end at row 34, five rows below the claim/shop controls at row 29. Values and names sit below the bars; clicking a bar explains its range. The panel stays visible throughout the run.
+## Windows 11 fullscreen fix
 
-Shop items use cyan, selections use white with an explicit SELECTED marker, and completed tiers use bright green. Shelves are cyan. The fullscreen compatibility improvements and all previous game content remain included.
+On Windows 11, startup prefers a dedicated Windows Terminal window using its fullscreen command. It now verifies the actual visible game window against the monitor bounds instead of treating a hidden ConPTY console or launch flag as proof. Startup waits for the window to settle and has a monitor-sized fallback for that game window. Classic Alt+Enter fullscreen is also verified from actual bounds when display-mode flags are incomplete. Redirected IDE terminals can relaunch the game into an interactive host.
 
-Validation: Release build without warnings; 6254 passing checks, including 180 complete campaigns, three loan tiers, variable fees, partial/full repayment, cooldown timing, bridge funding, debt quota enforcement, all three selected-card positions, lowered suction point, one-second timing, bar spacing and visible controls. Rendered color previews inspected at the minimum 108x40 layout.
+If Windows Terminal is unavailable or its launch fails, the game falls back to a dedicated classic console. StartClassicFullscreen.cmd forces that path. StartGame.cmd --windowed opts out of fullscreen. DiagnoseDisplay.cmd saves operating-system, monitor, DPI and console details in play/data/display-diagnostics.txt. On a small/high-DPI monitor, use Ctrl+- in Windows Terminal to fit at least 108 x 42 cells (singleplayer) or 140 x 42 (multiplayer); 172 x 46 is recommended for multiplayer. No persistent Terminal profile settings are edited.
 
----
-# TranslateUni v5
+## Validation
 
-## Start
+Release build: zero warnings/errors. Self-test: 7,652 checks, including all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
 
-Double-click **StartGame.cmd** after extracting the package. The game starts fullscreen by default. On Windows, it uses a dedicated Windows Terminal fullscreen window when Windows Terminal is available; traditional console windows use a borderless fullscreen fallback. The fallback restores the window frame and position on exit.
+Internet routing between two physical computers and the Windows 11 GUI path need confirmation on those machines; local socket/TLS tests do not verify a router's port forwarding or a particular Windows 11 installation.
 
-Fullscreen uses Microsoft's documented [Windows Terminal fullscreen launch option](https://learn.microsoft.com/windows/terminal/command-line-arguments). It does not change global terminal settings or send shortcuts to other applications. Some embedded terminal hosts provide an invisible console proxy; those hosts cannot be resized through the traditional fallback. For normal desktop play, launch from StartGame.cmd or the executable.
-
-For a windowed development session:
-
-```powershell
-.\play\TranslateUni.exe --windowed
-```
-
-The ready-built executable uses the .NET 8 runtime. Open **TranslateUni.sln** in Visual Studio to edit the source. The minimum terminal size is **108 × 40**; **120 × 42** is recommended. In larger fullscreen viewports, the game fills the screen and centers its readable interface.
-
-## Original card animation restored
-
-Card play, rerolls and leaving a card phase now show the sequence from the original uploaded BusinessGame_Debugged.cs:
-
-1. **Horizontal shrink:** 12 frames, with the text fading as the card narrows.
-2. **Vertical collapse:** 5 frames, down to a single row.
-3. **Star burst:** 5 frames of stars and sparks, ending with a clean disappearance.
-
-The original timing totals about one second. Raised-card positions are respected, and the desk, quotas and booster sidebar remain visible during the animation. Unaffordable or invalid actions do not play a disappearance animation.
-
-## Weaker bases, powerful upgrades
-
-All **20 shop item families** have **three normal tiers**. Base items are cheaper and weaker than in the previous version. Buy an item, and its next tier appears in that shelf slot. Press Enter again to purchase the upgrade, or return in another monthly shop.
-
-The shop offers the next tier of each eligible family. Maxed families are excluded from future draws. Each tier's displayed bonus is the **total effect at that tier**: an upgrade adds only the difference from the previous tier. Bonuses do not accidentally stack the full totals of every purchased tier.
-
-Some modest base items provide periodic effects. A base Wall Clock gives one extra decision every third month; its improved version does so every second month, and its gold version gives one every month. The Lucky Cat follows the same pattern for rerolls. The displayed `/3mo` and `/2mo` bonuses refer to every third/even month of the run.
-
-Example upgrade path:
-
-| Tier | Item | Price for this tier | Total effect |
-|---|---|---:|---|
-| 1 | Boss Chair | $500 | Capacity +15 |
-| 2 | Comfy Boss Chair | $900 | Capacity +35; +1 decision every second month |
-| 3 | Gold Boss Chair | $1,600 | Capacity +80; +1 decision each month |
-| 4 | Diamond Boss Chair | $3,000 | Capacity +175; +2 decisions each month |
-| 5 | Cosmic Boss Chair | $6,000 | Capacity +400; +4 decisions each month |
-
-Tiers must be purchased in order. The prices above are the price of each purchase, not the combined cost of reaching that tier. Other families also grow sharply: for example, a Desk Lamp goes from a $0.10 unit-cost saving at tier 1 to $3.00 at tier 5, and a Desk Plant goes from +1% demand to +35% demand.
-
-**I** opens the full upgrade definition, including current tier, next tier, price, total effect and unlock requirements. More expensive tiers are colored by rarity. Immediate stat gains apply when purchased; recurring stock, income, decisions and rerolls take effect from the following month.
-
-## Endless mode
-
-Clear all **12 normal monthly quotas** to win. On the victory screen, press **E** or click **Continue Endless** to keep the same company, cash, stock, boosters and upgrades.
-
-- Choosing Endless unlocks **tier 4 (Diamond)** and **tier 5 (Cosmic)** for every shop family.
-- A booster reward and shop visit prepare you for month 13.
-- Every endless profit quota is **35% higher than the previous month's**: the targets compound rather than grow by a fixed amount.
-- Existing secondary quotas still apply, and company-news events continue after each clear.
-- There is no fixed final month. A missed quota ends the endless attempt.
-- Your original twelve-month victory remains a win. Results add the number of extra quotas cleared and update the same run record rather than creating duplicate wins.
-
-Returning to the menu from a paused endless run saves its current result, but active company state is not saved for later resumption. A new run must earn its own twelve-month clear before choosing Endless.
-
-## Controls and learning
-
-The combined **Learning Guide + Tutorial** is available with **T/G** from the main menu. It includes the controls and a guided practice month. The guide and practice mention upgrades and the endless unlock.
-
-| Action | Keys |
-|---|---|
-| Navigate / choose | WASD, arrows, numbers, mouse |
-| Play, buy or upgrade | Enter |
-| Inspect full definition | I |
-| Clear selected card | Space during card phases |
-| End decisions / skip optional cards | E |
-| Reroll cards | R, using the monthly card rerolls |
-| Reroll shop | R, starting at $75; +$25 for each refresh that month |
-| Leave shop / next month | Space |
-| Return from shop to rewards / reopen shop | B |
-| Pause | ESC |
-| Scroll active boosters | Page Up / Page Down |
-| **Continue Endless after winning** | **E on the victory screen** |
-
-The six courses, 60 topics, three difficulties, funny short explanations, sloping statistics desk and active-booster sidebar are included. Settings and finished results are stored in `data` beside the executable.
-
-## Verification
-
-```powershell
-dotnet run --project TranslateUni.csproj -- --self-test
-dotnet run --project TranslateUni.csproj -- --preview
-```
-
-Checks cover the animation's original three stages and timing, fullscreen-size rendering, all 20 families and five tier definitions, upgrade prices and effect replacement, normal/endless tier limits, victory unlocks, month-13 progression, compounded quotas, continued company events, and saved endless results. All **180 course/topic/difficulty combinations** have a verified normal victory path. The endless sample clears additional quotas and ends naturally when its growing targets exceed the company's results.
-
-Keep `course-data.json` with the project when rebuilding; it is embedded into the executable.
-
-## Fullscreen compatibility update (v5.1)
-Startup checks the operating system, process architecture, all monitor pixel dimensions and positions, work areas, DPI scaling, terminal host and console grid. Classic consoles use their own fullscreen command when the old display-mode API is unavailable. Embedded terminals open a dedicated console when Windows Terminal is unavailable. The game does not resize the console after entering fullscreen. Font size is reduced on small classic-console displays when needed to fit the game.
-
-Start with StartGame.cmd. To check compatibility without starting the game, run DiagnoseDisplay.cmd. The report is saved beside the executable in data/display-diagnostics.txt (normally play/data/display-diagnostics.txt). The --fullscreen-test argument briefly tests fullscreen and exits; --windowed disables automatic fullscreen. Monitor sizes are measured in pixels, not physical inches. On non-Windows systems, use the terminal's own fullscreen control.
-
-Validated on Windows 10 build 19045 with three 1920x1080 monitors at 100% scaling: a dedicated console entered fullscreen, reported mode flag 1, and had bounds (0,0)-(1920,1080). The game regression suite passed all 4377 checks. Windows Terminal and other operating systems were not available for live fullscreen testing.
-
-## Animation and statistics update (v5.2)
-Animation playback is 25% faster: 22 frames now total 796ms instead of 995ms. Playing a decision, event or booster makes the chosen card taper and curve upward into a dot three rows above its raised top edge, then burst into a star. Only the unchosen cards use horizontal shrink and vertical collapse. Rerolling or skipping collapses all discarded cards.
-
-The original statistics desk is anchored lower in the gameplay area and stays visible on every active-run screen, including results, company news, boosters, shop, pause and inspection. Controls are positioned above the desk. The fullscreen compatibility changes from v5.1 are included.
-
-Validation: Release build with no warnings; all 4471 checks passed, including selected-card flight, animation cleanup, enlarged redraw region, persistent statistics and the full campaign suite. Text-frame previews inspected at 108x40 and 120x42.
-
-## Centered card animation (v5.3)
-Played decision, event and booster cards slide horizontally to the middle of the table first. The chosen card stays intact there for 1.5 seconds while the unchosen cards collapse, then performs the existing faster curving animation into a dot three rows above its centered top edge. Cards already in the middle do not incur a movement delay. The statistics desk remains visible throughout. Rerolls and skips retain their faster discard animation.
-
-Validation: Release build without warnings and 4607 passing checks, including all three starting card positions, exact pause timing, original card text at the centered position, animation cleanup and the full campaign suite.

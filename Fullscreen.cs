@@ -61,16 +61,18 @@ public static class FullscreenLauncher
     {
         var candidates = new List<string> { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "wt.exe") };
         candidates.AddRange((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator).Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => Path.Combine(p.Trim('"'), "wt.exe")));
-        return candidates.FirstOrDefault(File.Exists);
+        return candidates.FirstOrDefault(path=>{try{_ = File.GetAttributes(path);return true;}catch(Exception ex)when(ex is IOException or UnauthorizedAccessException){return false;}});
     }
-    public static bool RelaunchIfAvailable(string[] args)
+    public static bool NeedsDedicatedHost(bool visible,bool terminalAvailable,bool windows11,bool forced)=>forced||!visible||windows11&&terminalAvailable;
+    public static bool RelaunchIfAvailable(string[] args,bool forced=false)
     {
         if (!OperatingSystem.IsWindows() || args.Contains("--windowed") || args.Contains("--host-fullscreen") || args.Contains("--classic-host")) return false;
-        // A visible classic console is handled directly. Embedded consoles need a dedicated host.
         IntPtr window = NativeDisplay.GetConsoleWindow();
-        if (window != IntPtr.Zero && NativeDisplay.IsWindowVisible(window)) return false;
         string? terminal = FindTerminal();
-        if (terminal != null && Launch(terminal, args, true)) return true;
+        bool forceClassic=args.Contains("--force-classic");
+        bool visible=window!=IntPtr.Zero&&NativeDisplay.IsWindowVisible(window);
+        if(!NeedsDedicatedHost(visible,terminal!=null,OperatingSystem.IsWindowsVersionAtLeast(10,0,22000),forced||forceClassic))return false;
+        if (!forceClassic&&terminal != null && Launch(terminal, args, true)) return true;
         string classic = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "conhost.exe");
         if (File.Exists(classic) && Launch(classic, args, false)) return true;
         DisplayDiagnostics.Add("No dedicated fullscreen host could be launched. Continuing in the current terminal.");
@@ -79,19 +81,21 @@ public static class FullscreenLauncher
     static bool Launch(string host, string[] args, bool terminal)
     {
         string handshake = Path.Combine(Path.GetTempPath(), "TranslateUni-display-" + Guid.NewGuid().ToString("N") + ".txt");
+        string title="TranslateUni "+Guid.NewGuid().ToString("N")[..10];
         try
         {
             var start = new ProcessStartInfo(host) { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory };
             if (terminal)
-                foreach (string arg in new[] { "--window", "new", "--fullscreen", "new-tab", "--title", "TranslateUni", "--startingDirectory", AppContext.BaseDirectory }) start.ArgumentList.Add(arg);
+                foreach (string arg in new[] { "--window", "new", "--fullscreen", "new-tab", "--title", title, "--suppressApplicationTitle", "--startingDirectory", AppContext.BaseDirectory }) start.ArgumentList.Add(arg);
             string executable = Environment.ProcessPath ?? "dotnet";
             start.ArgumentList.Add(executable);
             if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
             foreach (string arg in args) start.ArgumentList.Add(arg);
             start.ArgumentList.Add(terminal ? "--host-fullscreen" : "--classic-host");
             start.ArgumentList.Add("--display-handshake=" + handshake);
+            start.ArgumentList.Add("--display-window-title="+title);
             // Avoid identifying a classic child as the parent's Windows Terminal session.
-            if (!terminal) start.Environment.Remove("WT_SESSION");
+            start.Environment.Remove("WT_SESSION");start.Environment.Remove("WT_PROFILE_ID");
             using Process? process = terminal ? Process.Start(start) : StartDedicated(start);
             if (process == null) return false;
             var timer = Stopwatch.StartNew();
@@ -118,8 +122,14 @@ public static class FullscreenLauncher
         // CREATE_NEW_CONSOLE prevents inheriting an IDE / pseudoconsole's hidden host.
         string command = Quote(start.FileName) + " " + string.Join(" ", start.ArgumentList.Select(Quote));
         var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
-        if (!CreateProcessW(start.FileName, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x10, IntPtr.Zero, start.WorkingDirectory, ref startup, out var info))
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        string environment=string.Join('\0',start.Environment.OrderBy(p=>p.Key,StringComparer.OrdinalIgnoreCase).Select(p=>p.Key+"="+p.Value))+"\0\0";
+        IntPtr block=Marshal.StringToHGlobalUni(environment);ProcessInfo info;
+        try
+        {
+            if (!CreateProcessW(start.FileName, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x410, block, start.WorkingDirectory, ref startup, out info))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
+        finally{Marshal.FreeHGlobal(block);}
         try { return Process.GetProcessById((int)info.ProcessId); }
         finally { CloseHandle(info.Process); CloseHandle(info.Thread); }
     }
@@ -144,7 +154,7 @@ public static class FullscreenLauncher
     {
         string? option = args.FirstOrDefault(a => a.StartsWith("--display-handshake=", StringComparison.Ordinal));
         if (option == null) return;
-        try { File.WriteAllText(option["--display-handshake=".Length..], ready ? "ready" : "failed"); }
+        try { string path=option["--display-handshake=".Length..];File.WriteAllText(path+".tmp",ready?"ready":"failed");File.Move(path+".tmp",path,true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { DisplayDiagnostics.Add("Startup acknowledgement failed: " + ex.Message); }
     }
 }
@@ -188,6 +198,7 @@ public sealed class ConsoleFullscreen : IDisposable
         if (NativeDisplay.GetWindowRect(window, out var bounds)) DisplayDiagnostics.Add("Resulting window bounds: " + bounds);
         NativeDisplay.GetConsoleDisplayMode(out uint mode);
         Applied = (mode & 1) != 0 || (changed && NativeDisplay.GetWindowRect(window, out var actual) && Covers(actual, info.Monitor));
+        if(nativeMode&&NativeDisplay.GetWindowRect(window,out var nativeBounds)&&Covers(nativeBounds,info.Monitor))Applied=true;
         DisplayDiagnostics.Add($"Fullscreen verified: {Applied}; native mode: {nativeMode}; display mode flags: {mode}");
         if (nativeMode || changed)
         { exitHandler = (_, _) => Dispose(); AppDomain.CurrentDomain.ProcessExit += exitHandler; }

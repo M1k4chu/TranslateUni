@@ -1,6 +1,6 @@
 namespace TranslateUni;
 
-public static class Verification
+public static partial class Verification
 {
     static int assertions;
     static void Check(bool okay, string message)
@@ -23,6 +23,8 @@ public static class Verification
         CheckInputAndTheme(courses);
         CheckStatementsAndMotion(courses);
         CheckLatestFixes(courses);
+        CheckMultiplayer(courses);
+        CheckOnlineAndFullscreen();
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 31 && Run.BoosterPool.Length == 20, "expanded pools");
         foreach (Card card in GameContent.Decisions)
@@ -229,7 +231,9 @@ public static class Verification
 
         Key(app, ConsoleKey.Escape);
         Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.Enter);
-        Check(app.Screen == Screen.Courses, "W/S navigate main menu");
+        Check(app.Screen == Screen.Modes, "W/S navigate main menu to play modes");
+        Key(app,ConsoleKey.Enter);Key(app,ConsoleKey.Enter);
+        Check(app.Screen == Screen.Courses, "singleplayer profile continues to courses");
         Key(app, ConsoleKey.D); Key(app, ConsoleKey.A); Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.Enter);
         Check(app.Screen == Screen.Topics, "WASD navigates course grid");
         Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.Enter);
@@ -657,7 +661,7 @@ public static class Verification
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.R); Key(app, ConsoleKey.E); capture("04-events"); Key(app, ConsoleKey.E); capture("05-report");
         Key(app, ConsoleKey.Enter); capture("06-company-news"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("07-boosters");
         Key(app, ConsoleKey.Enter); capture("08-shop-and-side-menu"); Key(app, ConsoleKey.D2); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Spacebar); capture("09-tutorial-complete");
-        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.D1); capture("10-course-selection"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); capture("11-difficulty");
+        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.D1);capture("10-modes");Key(app,ConsoleKey.Enter);capture("10-profile");Key(app,ConsoleKey.Enter); capture("10-course-selection"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); capture("11-difficulty");
         Run year = AutoPlay(courses[0], 0, Difficulty.Easy, 73);
         typeof(GameApp).GetProperty(nameof(GameApp.Game))!.SetValue(app, year);
         typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.End);

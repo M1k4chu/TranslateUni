@@ -3,7 +3,7 @@ using System.Text;
 
 namespace TranslateUni;
 
-public sealed record Input(ConsoleKey Key = ConsoleKey.NoName, int X = -1, int Y = -1);
+public sealed record Input(ConsoleKey Key = ConsoleKey.NoName, int X = -1, int Y = -1, char Character = '\0');
 public sealed record HitBox(int X, int Y, int Width, int Height, string Action, int Index = -1);
 
 public sealed class Canvas
@@ -128,16 +128,22 @@ public sealed class TerminalInput : IDisposable
         if (!GetConsoleMode(handle, out originalMode)) return;
         mouseEnabled = SetConsoleMode(handle, (originalMode | 0x0010u | 0x0080u | 0x0008u) & ~0x0040u);
     }
-    public Input Read()
+    public Input Read(int timeoutMs=-1)
     {
-        if (!mouseEnabled) return new(Console.ReadKey(true).Key);
+        var timer=System.Diagnostics.Stopwatch.StartNew();
+        if(!mouseEnabled)
+        {
+            while(timeoutMs>=0 && !Console.KeyAvailable){if(timer.ElapsedMilliseconds>=timeoutMs)return new();Thread.Sleep(10);}
+            var key=Console.ReadKey(true);return new(key.Key,Character:key.KeyChar);
+        }
         while (true)
         {
+            if(timeoutMs>=0 && GetNumberOfConsoleInputEvents(handle,out uint pending) && pending==0){if(timer.ElapsedMilliseconds>=timeoutMs)return new();Thread.Sleep(10);continue;}
             if (!ReadConsoleInputW(handle, out InputRecord record, 1, out uint count)) return new(Console.ReadKey(true).Key);
             if (count == 0) continue;
             if (record.Type == 4) return new(); // Resize: repaint the current screen.
             if (record.Type == 1)
-            { ConsoleKey key=(ConsoleKey)record.VirtualKey; if(releaseGuard.Accept(key,record.KeyDown != 0)) return new(key); continue; }
+            { ConsoleKey key=(ConsoleKey)record.VirtualKey; if(releaseGuard.Accept(key,record.KeyDown != 0)) return new(key,Character:record.Character); continue; }
             if (record.Type != 2) continue;
             bool pressed = (record.Buttons & 1) != 0;
             bool click = pressed && !leftDown && record.MouseFlags == 0;
@@ -165,7 +171,9 @@ public sealed class TerminalInput : IDisposable
         if(!WriteConsoleInputW(handle,fresh,1,out _)) throw new IOException("Could not write fresh input record.");
         Input next=Read(); DiscardPending();
         if(next.Key!=ConsoleKey.F24) throw new InvalidOperationException("A stale input survived the screen boundary: "+next.Key);
-        return "PASS: queued Enter and number repeats discarded; fresh key accepted.";
+        var timer=System.Diagnostics.Stopwatch.StartNew();Input idle=Read(30);
+        if(idle.Key!=ConsoleKey.NoName||timer.ElapsedMilliseconds>1000)throw new InvalidOperationException("Timed input did not return promptly while idle.");
+        return "PASS: queued Enter and number repeats discarded; fresh key accepted; idle timed reads keep the multiplayer clock running.";
     }
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool WriteConsoleInputW(IntPtr input,InputRecord[] records,uint count,out uint written);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool FlushConsoleInputBuffer(IntPtr input);
@@ -188,6 +196,7 @@ public sealed class TerminalInput : IDisposable
         [FieldOffset(8)] public uint Buttons;
         [FieldOffset(16)] public uint MouseFlags;
     }
+    [DllImport("kernel32.dll")] static extern bool GetNumberOfConsoleInputEvents(IntPtr input,out uint count);
     [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int id);
     [DllImport("kernel32.dll")] static extern bool GetConsoleMode(IntPtr handle, out uint mode);
     [DllImport("kernel32.dll")] static extern bool SetConsoleMode(IntPtr handle, uint mode);
