@@ -41,7 +41,7 @@ public static partial class Verification
         coop.Input(1,new(ConsoleKey.D2),now.AddSeconds(3));coop.Input(1,new(ConsoleKey.Enter),now.AddSeconds(3));
         Check(coop.Teams[0].Ballot.Revote,"different card votes trigger team revote");
         coop.Input(0,new(ConsoleKey.Enter),now.AddSeconds(4));coop.Input(1,new(ConsoleKey.Enter),now.AddSeconds(4));
-        Check(coop.Teams[0].Run.Actions==actions-1&&coop.Teams[0].Ballot.Deadline==null,"tied revote skips just one decision");
+        Check(coop.Teams[0].Run.Actions==actions&&coop.Teams[0].Ballot.Deadline==null,"tied revote skips the vote without spending a decision");
         coop.Tick(now.AddMinutes(3));Check(coop.Teams[0].Run.Phase==Phase.Events&&coop.DecisionDeadline==null,"decision timeout safely enters events");
         coop.Input(0,new(ConsoleKey.E),now.AddMinutes(3));coop.Input(1,new(ConsoleKey.E),now.AddMinutes(3));
         Check(coop.Teams[0].Run.Reports.Count==1,"co-op settles month once");
