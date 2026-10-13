@@ -11,7 +11,7 @@ public static class Program
         try
         {
             List<Course> courses = Catalog.Load();
-            if (args.Contains("--self-test")) { Verification.SelfTest(courses); return 0; }
+            if (args.Contains("--self-test")||args.Contains("--network-self-test")) { Verification.SelfTest(courses,args.Contains("--network-self-test")); return 0; }
             if (args.Contains("--preview")) { Verification.Preview(courses); return 0; }
             DisplayDiagnostics.Capture();
             if(args.Contains("--terminal-self-test"))

@@ -4,7 +4,7 @@ namespace TranslateUni;
 
 public static partial class Verification
 {
-    static void CheckMultiplayer(List<Course> courses)
+    static void CheckMultiplayer(List<Course> courses,bool network)
     {
         DateTimeOffset now=DateTimeOffset.Parse("2026-10-13T12:00:00Z");
         Check(PlayerAvatars.All.All(a=>a.Length==4&&a.All(row=>row.Length==4&&row.All(c=>c<128))),"every avatar is exactly 4 x 4 ASCII");
@@ -105,6 +105,7 @@ public static partial class Verification
         Check(endless.Teams.All(t=>t.Run.Endless&&t.Run.Phase==Phase.Booster&&t.Run.MaxShopTier==5),"all winning teams unlock endless and five shop tiers together");
         var wire=LanPeer.Frame(standings,0,7);Canvas decoded=LanPeer.Canvas(wire);
         Check(decoded.Lines().SequenceEqual(standings.Lines())&&decoded.ColorAt(1,1)==standings.ColorAt(1,1),"network frames preserve text and colors");
+        if(!network)return;
         var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
         try
         {

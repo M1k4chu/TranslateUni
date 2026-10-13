@@ -16,17 +16,18 @@ public static partial class Verification
         }
     }
 
-    public static void SelfTest(List<Course> courses)
+    public static void SelfTest(List<Course> courses,bool network=false)
     {
         assertions = 0;
+        Console.WriteLine(network?"Network checks enabled: test sockets use loopback only.":"Offline checks: no network listeners are opened.");
         CheckLoansAndStatistics(courses);
         CheckInputAndTheme(courses);
         CheckStatementsAndMotion(courses);
         CheckLatestFixes(courses);
-        CheckMultiplayer(courses);
+        CheckMultiplayer(courses,network);
         CheckVotingRefinements(courses);
-        CheckNoVote(courses); CheckNeutralVotes(courses); CheckLobbyTeams(courses); CheckSharing();
-        CheckOnlineAndFullscreen();
+        CheckNoVote(courses); CheckNeutralVotes(courses); CheckLobbyTeams(courses,network); CheckSharing();
+        CheckOnlineAndFullscreen(network);
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 31 && Run.BoosterPool.Length == 20, "expanded pools");
         foreach (Card card in GameContent.Decisions)

@@ -3,11 +3,12 @@
     <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <RootNamespace>TranslateUni</RootNamespace><AssemblyName>TranslateUni</AssemblyName>
-    <Product>TranslateUni</Product><Version>6.5.0</Version>
+    <Product>TranslateUni</Product><Version>6.6.0</Version>
   </PropertyGroup>
   <ItemGroup><EmbeddedResource Include="course-data.json" LogicalName="TranslateUni.CourseData" /></ItemGroup>
   <ItemGroup><PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" /></ItemGroup>
 </Project>
+
 
 
 

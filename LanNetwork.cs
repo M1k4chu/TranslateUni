@@ -46,12 +46,12 @@ public static class LanMultiplayer
 {
     public const int Port=45873;
     public static int HostingPort(string value)=>string.IsNullOrWhiteSpace(value)?Port:int.TryParse(value,out int port)&&port is >=1 and <=65535?port:throw new ArgumentException("Enter a hosting port from 1 to 65535, or leave it blank.");
-    public static TcpListener StartListener(int port,bool fallback)
+    public static TcpListener StartListener(int port,bool fallback,bool localOnly=false)
     {
         for(int attempt=0;attempt<(fallback?11:1)&&port+attempt<=65535;attempt++)
         {
-            var listener=new TcpListener(Socket.OSSupportsIPv6?IPAddress.IPv6Any:IPAddress.Any,port+attempt);
-            if(Socket.OSSupportsIPv6)listener.Server.DualMode=true;
+            var listener=new TcpListener(localOnly?IPAddress.Loopback:Socket.OSSupportsIPv6?IPAddress.IPv6Any:IPAddress.Any,port+attempt);
+            if(!localOnly&&Socket.OSSupportsIPv6)listener.Server.DualMode=true;
             listener.ExclusiveAddressUse=true;
             try{listener.Start(8);return listener;}
             catch(SocketException ex)when(ex.SocketErrorCode==SocketError.AddressAlreadyInUse&&fallback&&attempt<10&&port+attempt<65535){listener.Stop();}

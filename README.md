@@ -1,6 +1,12 @@
-# TranslateUni v6.5
+# TranslateUni v6.6
 
-This repository contains the latest source and the chronological history of 20 saved versions. See [HISTORY.md](HISTORY.md) for the tags and [PUBLISH-GITHUB.md](PUBLISH-GITHUB.md) to upload it. Windows 10 and 11 are supported. Install the .NET 8 SDK and run `StartGame.cmd`, or open `TranslateUni.sln` in Visual Studio. Compiled builds are excluded from Git; the launcher builds from source when needed.
+Extract this folder and run StartGame.cmd. Windows 10 and 11 are supported; the .NET 8 runtime is required. A compiled build is included in play/. Open TranslateUni.sln to edit the source.
+
+## Offline verification and firewall alerts in v6.6
+
+The previous port-conflict verification opened the same network-facing listener used by real hosting, which could trigger a Windows firewall alert for a temporary verification build. Normal --self-test now opens no sockets. Network integration checks require the explicit --network-self-test flag, and every test listener is bound to loopback rather than LAN/public interfaces. Existing listeners and peers are closed when their checks or hosting session end. Nothing starts a server when you launch singleplayer or close the game.
+
+An already displayed Windows firewall prompt can be cancelled. Real multiplayer hosting may still request permission because it intentionally accepts connections from other computers. Firewall settings and existing rules have not been changed by this update.
 
 ## Hidden connection details and click-to-copy in v6.5
 
@@ -12,7 +18,7 @@ Press F11 or click COPY INVITE to copy the complete online invite while it is hi
 
 Team selection appears only in Rivalry CO-OP, after connecting to the lobby. Both hosts and guests can inspect the rosters and use 1 / 2 or click JOIN TEAM to choose a company. The first player on each team is its captain and can adjust its slots with the lobby +/- buttons (1-4 players, never fewer than the teammates already present). Players may switch to another team with space before the game starts. The host cannot start while a connected player is still choosing a team. CO-OP and two-player Rivalry assign companies automatically.
 
-LAN hosting now accepts an optional port and tries up to ten nearby alternatives if that port is occupied. Share the full IP:port address shown in the lobby so guests connect to the correct server. Online hosting retains its exact invite port; if occupied, join the existing host or use a different port in the public-address field and forward that port. Failed listeners are closed. Everyone must use v6.5: its updated lobby protocol rejects older versions.
+LAN hosting now accepts an optional port and tries up to ten nearby alternatives if that port is occupied. Share the full IP:port address shown in the lobby so guests connect to the correct server. Online hosting retains its exact invite port; if occupied, join the existing host or use a different port in the public-address field and forward that port. Failed listeners are closed. Everyone must use v6.6: its updated lobby protocol rejects older versions.
 
 ## Joining, waiting and neutral voting in v6.3
 
@@ -89,7 +95,7 @@ If Windows Terminal is unavailable or its launch fails, the game falls back to a
 
 ## Validation
 
-Release build: zero warnings/errors. Self-test: 7,860 checks, including all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
+Release build: zero warnings/errors. Offline self-test: 7,839 checks. Optional network checks are separately enabled with --network-self-test; prior integration validation covered all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
 
 Internet routing between two physical computers and the Windows 11 GUI path need confirmation on those machines; local socket/TLS tests do not verify a router's port forwarding or a particular Windows 11 installation.
 

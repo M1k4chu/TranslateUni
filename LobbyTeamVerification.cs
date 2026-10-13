@@ -3,7 +3,7 @@ using System.Net.Sockets;
 namespace TranslateUni;
 public static partial class Verification
 {
-    static void CheckLobbyTeams(List<Course> courses)
+    static void CheckLobbyTeams(List<Course> courses,bool network)
     {
         var now=DateTimeOffset.Parse("2026-10-13T12:00:00Z");
         var match=new LanMatch(courses,PlayMode.RivalryCoop,[2,2],0,0,Difficulty.Easy,42);
@@ -28,15 +28,17 @@ public static partial class Verification
             Canvas prejoin=new(172,46);new PlayerCountSelection().Draw(prejoin,mode,true,0);Check(prejoin.Buttons.Count==0,"joining screen has no team or captain selection in "+mode);
         }
         Check(LanMultiplayer.HostingPort("")==45873&&LanMultiplayer.HostingPort("45874")==45874,"LAN hosting accepts default or custom port");
-        var first=LanMultiplayer.StartListener(0,false);int occupied=((IPEndPoint)first.LocalEndpoint).Port;
+        if(!network)return;
+        var first=LanMultiplayer.StartListener(0,false,localOnly:true);int occupied=((IPEndPoint)first.LocalEndpoint).Port;
         try
         {
-            var fallback=LanMultiplayer.StartListener(occupied,true);
+            Check(((IPEndPoint)first.LocalEndpoint).Address.Equals(IPAddress.Loopback),"integration port tests listen only on loopback");
+            var fallback=LanMultiplayer.StartListener(occupied,true,localOnly:true);
             try{Check(((IPEndPoint)fallback.LocalEndpoint).Port!=occupied,"occupied LAN port automatically selects a free alternative");}finally{fallback.Stop();}
-            bool rejected=false;try{var duplicate=LanMultiplayer.StartListener(occupied,false);duplicate.Stop();}catch(SocketException ex){rejected=ex.SocketErrorCode==SocketError.AddressAlreadyInUse;}
+            bool rejected=false;try{var duplicate=LanMultiplayer.StartListener(occupied,false,localOnly:true);duplicate.Stop();}catch(SocketException ex){rejected=ex.SocketErrorCode==SocketError.AddressAlreadyInUse;}
             Check(rejected,"online hosting preserves the invite port and reports an occupied port");
         }
         finally{first.Stop();}
-        var reopened=LanMultiplayer.StartListener(occupied,false);reopened.Stop();Check(true,"stopped lobby listener releases its port for another host");
+        var reopened=LanMultiplayer.StartListener(occupied,false,localOnly:true);reopened.Stop();Check(true,"stopped lobby listener releases its port for another host");
     }
 }

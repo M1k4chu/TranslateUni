@@ -4,7 +4,7 @@ using System.Security.Authentication;
 namespace TranslateUni;
 public static partial class Verification
 {
-    static void CheckOnlineAndFullscreen()
+    static void CheckOnlineAndFullscreen(bool network)
     {
         Check(FullscreenLauncher.NeedsDedicatedHost(true,true,true,false),"Windows 11 prefers a dedicated Terminal window even with a visible console");
         Check(!FullscreenLauncher.NeedsDedicatedHost(true,true,false,false),"existing classic Windows 10 console can fullscreen directly");
@@ -14,6 +14,7 @@ public static partial class Verification
         Check(OnlineInvite.Endpoint("[::1]:12345")==("::1",12345),"IPv6 addresses are supported");
         foreach(string bad in new[]{"","bad address","user@server","server:0","server:65536","server/path"})
         {bool rejected=false;try{OnlineInvite.Endpoint(bad);}catch(ArgumentException){rejected=true;}Check(rejected,"invalid endpoint rejected: "+bad);}
+        if(!network)return;
         var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
         try
         {
