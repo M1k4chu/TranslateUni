@@ -15,17 +15,17 @@ public sealed partial class GameApp
         Run g = Game!;
         for (int y = 0; y < height; y++) c.Text(0, y, "|", ConsoleColor.DarkCyan);
         bool between = g.Phase is Phase.SpecialEvent or Phase.Booster or Phase.Shop;
-        int month = between && g.Month < 12 ? g.Month + 1 : g.Month;
+        int month = between && (g.Month < 12 || g.Endless) ? g.Month + 1 : g.Month;
         MonthReport? previous = between || g.Phase is Phase.Won or Phase.Lost
             ? g.LastReport : g.Reports.LastOrDefault(r => r.Month < g.Month);
-        c.Text(2, 1, $"{(between ? "NEXT " : "")}MONTH {month}/12 QUOTAS", ConsoleColor.Cyan);
+        c.Text(2, 1, g.Endless ? $"{(between ? "NEXT " : "")}ENDLESS MONTH {month}" : $"{(between ? "NEXT " : "")}MONTH {month}/12 QUOTAS", ConsoleColor.Cyan);
         c.Text(2, 2, $"Profit >= ${g.ProfitTargetFor(month):N0}", ConsoleColor.Yellow);
         c.Text(2, 3, previous == null ? "Last profit: -- (new run)" : $"Last profit: ${previous.Profit:N0}", ConsoleColor.White);
         c.Text(2, 4, previous == null ? "Last sales: --" : $"Last sales: ${previous.Revenue:N0}");
         int yQuota = 5;
         foreach (Quota quota in g.Quotas(month).Skip(1))
             c.Text(2, yQuota++, $"{quota.Name} {(quota.AtLeast ? ">=" : "<=")} {Metric(quota.Name, quota.Target)}", ConsoleColor.Cyan);
-        c.Text(2, 9, $"Office decorations: {g.Owned.Count}/20");
+        c.Text(2, 9, $"Decor: {g.Owned.Count}/20 | Tiers 1-{g.MaxShopTier}");
         c.Text(2, 10, "ACTIVE BOOSTER CARDS", ConsoleColor.White);
         c.Text(2, 11, "GREEN regular / PURPLE rare", ConsoleColor.DarkGray);
         List<ActiveBooster> active = SortedBoosters();
@@ -61,7 +61,7 @@ public sealed partial class GameApp
         c.Center(6, news.Name.ToUpperInvariant(), GameContent.Color(news.Rarity));
         c.Center(8, news.Flavor, ConsoleColor.Yellow);
         c.Wrapped(6, 11, news.Description, c.Width - 12, 6, ConsoleColor.White);
-        c.Wrapped(6, 19, g.Cleared == 12 ? "All twelve quotas are already met. This final headline cannot cancel your victory."
+        c.Wrapped(6, 19, g.Cleared == 12 && !g.Endless ? "The year is won. This headline applies if you choose Endless, and cannot cancel your victory."
             : "This is a company event, not an optional card. Read the consequences, then prepare for next month.", c.Width - 12, 3);
         c.Button((c.Width - 21) / 2, 25, "ENTER ACKNOWLEDGE", "companyContinue", selected: true);
         Footer(c, "ENTER: Continue | I: Details | ESC: Pause");
@@ -82,7 +82,8 @@ public sealed partial class GameApp
                 Booster b = Game.Boosters[selected]; ShowInfo(b.Name, GameContent.Flavor(b), b.Description + (b.Persistent ? ". This effect stays for this run." : ". This is an instant gift; it is not an active booster."), b.Rarity); break;
             case Screen.Shop:
                 if (shopIndex >= Game.ShopOffers.Count) { notice = "This shelf slot is empty."; break; }
-                Decoration d = Game.ShopOffers[shopIndex]; ShowInfo(d.Name, GameContent.DecorationFlavor(d.Id), $"Costs ${d.Cost}. {d.Boost}. Buy once per run.", d.Rarity); break;
+                Decoration d = Game.ShopOffers[shopIndex];
+                ShowInfo(d.Name, GameContent.DecorationFlavor(d.Id), $"Tier {d.Tier}/{Game.MaxShopTier}. Price: ${d.Cost}. Total effect at this tier: {d.Boost}. Current tier: {Game.ShopTier(d.Id)}. Upgrading adds only the difference, and preserves earlier progress. Tiers 4-5 unlock after choosing Endless.", d.Rarity); break;
             case Screen.SpecialEvent:
                 CompanyEvent n = Game.CompanyNews!; ShowInfo(n.Name, n.Flavor, n.Description, n.Rarity); break;
         }
@@ -181,7 +182,7 @@ public sealed partial class GameApp
             5 => "Green PASS means every quota was met. Profit is not cash.",
             6 => "Company news is mandatory and changes the next month.",
             7 => "Choose one free booster. This demo gifts the other color too.",
-            8 => "Decorations last all run. This lamp lowers unit cost.",
+            8 => "Decorations start small. ENTER can buy the next upgrade tier.",
             _ => "SPACE leaves and starts next month. Stats and boosts carry over."
         };
         int y = Screen is Screen.Table or Screen.Events ? 7 : Screen == Screen.Booster ? 6 : Screen == Screen.Shop ? 34 : 32;
@@ -193,7 +194,7 @@ public sealed partial class GameApp
         Header(c, "TUTORIAL COMPLETE", "You ran a month and prepared the next one.");
         c.Wrapped(5, 7, "Look right: month two has a bigger quota, last month's actual earnings, and both your green and purple boosters. Your lamp also stays active.", c.Width - 10, 4, ConsoleColor.Green);
         DrawStats(c);
-        c.Wrapped(5, 14, "In full games, repeat this cycle twelve times to win. Later topics add service, cash and quality targets. One missed quota ends the run.", c.Width - 10, 4);
+        c.Wrapped(5, 14, "Clear twelve quotas to win, then choose Endless if you want more. Shop items have three normal tiers and two extra endless tiers. Targets grow 35% each endless month.", c.Width - 10, 4);
         c.Wrapped(5, 20, "Common cards show up often. Uncommon, Rare, Epic and Legendary cards appear less often. Rarer is exciting, but read the cost before playing.", c.Width - 10, 4);
         c.Wrapped(5, 24, "I opens the full card explanation. Click a side-panel booster to inspect it. Page Up/Down scrolls long booster lists. ESC pauses; Space clears a selection.", c.Width - 10, 4);
         c.Button((c.Width - 22) / 2, 35, "ENTER LEARNING GUIDE", "tutorialFinish", selected: true);

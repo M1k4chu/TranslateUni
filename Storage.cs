@@ -2,7 +2,8 @@ using System.Text.Json;
 
 namespace TranslateUni;
 
-public sealed record RunRecord(string Course, string Topic, Difficulty Difficulty, int Cleared, bool Won, double Profit, DateTimeOffset Finished);
+public sealed record RunRecord(string Course, string Topic, Difficulty Difficulty, int Cleared, bool Won, double Profit,
+    DateTimeOffset Finished, string Id = "", bool Endless = false);
 public sealed class Preferences
 {
     public Difficulty Difficulty { get; set; } = Difficulty.Normal;
@@ -44,8 +45,10 @@ public sealed class Storage
     public void SaveSettings() => Save("settings.json", Preferences);
     public void Record(Run run)
     {
-        History.Add(new(run.Course.Name, run.Lesson.Name, run.Difficulty, run.Cleared, run.Phase == Phase.Won,
-            run.Reports.Sum(r => r.Profit), DateTimeOffset.Now));
+        var record = new RunRecord(run.Course.Name, run.Lesson.Name, run.Difficulty, run.Cleared, run.Cleared >= 12,
+            run.Reports.Sum(r => r.Profit), DateTimeOffset.Now, run.Id, run.Endless);
+        int existing = History.FindIndex(item => item.Id == run.Id);
+        if (existing < 0) History.Add(record); else History[existing] = record;
         Save("runs.json", History);
     }
 }

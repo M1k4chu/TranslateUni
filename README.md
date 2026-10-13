@@ -1,65 +1,84 @@
-# TranslateUni
+# TranslateUni v5
 
-The next version of the business card game, with a merged learning guide, WASD controls and a rotating decoration shop.
+## Start
 
-## Play
+Double-click **StartGame.cmd** after extracting the package. The game starts fullscreen by default. On Windows, it uses a dedicated Windows Terminal fullscreen window when Windows Terminal is available; traditional console windows use a borderless fullscreen fallback. The fallback restores the window frame and position on exit.
 
-Extract the complete package and double-click **StartGame.cmd**. The ready-built game is in `play/TranslateUni.exe` and uses the installed .NET 8 runtime.
+Fullscreen uses Microsoft's documented [Windows Terminal fullscreen launch option](https://learn.microsoft.com/windows/terminal/command-line-arguments). It does not change global terminal settings or send shortcuts to other applications. Some embedded terminal hosts provide an invisible console proxy; those hosts cannot be resized through the traditional fallback. For normal desktop play, launch from StartGame.cmd or the executable.
 
-For source development, open **TranslateUni.sln** in Visual Studio, or run:
+For a windowed development session:
 
 ```powershell
-dotnet run --project TranslateUni.csproj
+.\play\TranslateUni.exe --windowed
 ```
 
-Recommended terminal: **120 columns × 42 rows**. Minimum: **108 × 40**. The game tries to resize compatible Windows console windows.
+The ready-built executable uses the .NET 8 runtime. Open **TranslateUni.sln** in Visual Studio to edit the source. The minimum terminal size is **108 × 40**; **120 × 42** is recommended. In larger fullscreen viewports, the game fills the screen and centers its readable interface.
 
-## Learning Guide + Tutorial
+## Original card animation restored
 
-The main menu has one combined **Learning Guide + Tutorial** entry. **T** and **G** both open this same guide. It contains the controls, monthly game cycle, quota rules, economy, boosters and shop instructions. Press **Enter** to start its guided practice, which takes about two minutes at normal reading pace.
+Card play, rerolls and leaving a card phase now show the sequence from the original uploaded BusinessGame_Debugged.cs:
 
-Practice demonstrates one complete month and the transition into month two. When it finishes, **Enter returns to the Learning Guide**. Press **ESC** from the guide to return to the main menu. The practice does not add a fake run to your results.
+1. **Horizontal shrink:** 12 frames, with the text fading as the card narrows.
+2. **Vertical collapse:** 5 frames, down to a single row.
+3. **Star burst:** 5 frames of stars and sparks, ending with a clean disappearance.
 
-## Controls
+The original timing totals about one second. Raised-card positions are respected, and the desk, quotas and booster sidebar remain visible during the animation. Unaffordable or invalid actions do not play a disappearance animation.
 
-**WASD and arrows both navigate.** W/A move up/left; S/D move down/right. Course and shop grids move vertically by a row. Menus, topics, difficulty choices, cards and settings support these keys. Number shortcuts, Enter and mouse selection remain available.
+## Weaker bases, powerful upgrades
+
+All **20 shop item families** have **three normal tiers**. Base items are cheaper and weaker than in the previous version. Buy an item, and its next tier appears in that shelf slot. Press Enter again to purchase the upgrade, or return in another monthly shop.
+
+The shop offers the next tier of each eligible family. Maxed families are excluded from future draws. Each tier's displayed bonus is the **total effect at that tier**: an upgrade adds only the difference from the previous tier. Bonuses do not accidentally stack the full totals of every purchased tier.
+
+Some modest base items provide periodic effects. A base Wall Clock gives one extra decision every third month; its improved version does so every second month, and its gold version gives one every month. The Lucky Cat follows the same pattern for rerolls. The displayed `/3mo` and `/2mo` bonuses refer to every third/even month of the run.
+
+Example upgrade path:
+
+| Tier | Item | Price for this tier | Total effect |
+|---|---|---:|---|
+| 1 | Boss Chair | $500 | Capacity +15 |
+| 2 | Comfy Boss Chair | $900 | Capacity +35; +1 decision every second month |
+| 3 | Gold Boss Chair | $1,600 | Capacity +80; +1 decision each month |
+| 4 | Diamond Boss Chair | $3,000 | Capacity +175; +2 decisions each month |
+| 5 | Cosmic Boss Chair | $6,000 | Capacity +400; +4 decisions each month |
+
+Tiers must be purchased in order. The prices above are the price of each purchase, not the combined cost of reaching that tier. Other families also grow sharply: for example, a Desk Lamp goes from a $0.10 unit-cost saving at tier 1 to $3.00 at tier 5, and a Desk Plant goes from +1% demand to +35% demand.
+
+**I** opens the full upgrade definition, including current tier, next tier, price, total effect and unlock requirements. More expensive tiers are colored by rarity. Immediate stat gains apply when purchased; recurring stock, income, decisions and rerolls take effect from the following month.
+
+## Endless mode
+
+Clear all **12 normal monthly quotas** to win. On the victory screen, press **E** or click **Continue Endless** to keep the same company, cash, stock, boosters and upgrades.
+
+- Choosing Endless unlocks **tier 4 (Diamond)** and **tier 5 (Cosmic)** for every shop family.
+- A booster reward and shop visit prepare you for month 13.
+- Every endless profit quota is **35% higher than the previous month's**: the targets compound rather than grow by a fixed amount.
+- Existing secondary quotas still apply, and company-news events continue after each clear.
+- There is no fixed final month. A missed quota ends the endless attempt.
+- Your original twelve-month victory remains a win. Results add the number of extra quotas cleared and update the same run record rather than creating duplicate wins.
+
+Returning to the menu from a paused endless run saves its current result, but active company state is not saved for later resumption. A new run must earn its own twelve-month clear before choosing Endless.
+
+## Controls and learning
+
+The combined **Learning Guide + Tutorial** is available with **T/G** from the main menu. It includes the controls and a guided practice month. The guide and practice mention upgrades and the endless unlock.
 
 | Action | Keys |
 |---|---|
-| Navigate / select | WASD, arrows, numbers, or mouse |
-| Play card / accept choice / buy | Enter |
-| Clear a selected card | Space, during card phases |
-| Inspect selected card or decoration | I |
-| End decisions / skip optional events | E |
-| Decision/event reroll | R; one base reroll per month |
-| Shop reroll | R; spends cash and refreshes six offers |
-| **Leave shop and start next month** | **Space** |
-| Return from shop to rewards | B or ESC |
-| Reopen shop from rewards | B |
-| Advance from rewards | Space or Enter |
-| Pause active run | ESC |
-| Scroll active-booster sidebar | Page Up / Page Down |
-| Learning Guide + Tutorial | T or G from the main menu |
+| Navigate / choose | WASD, arrows, numbers, mouse |
+| Play, buy or upgrade | Enter |
+| Inspect full definition | I |
+| Clear selected card | Space during card phases |
+| End decisions / skip optional cards | E |
+| Reroll cards | R, using the monthly card rerolls |
+| Reroll shop | R, starting at $75; +$25 for each refresh that month |
+| Leave shop / next month | Space |
+| Return from shop to rewards / reopen shop | B |
+| Pause | ESC |
+| Scroll active boosters | Page Up / Page Down |
+| **Continue Endless after winning** | **E on the victory screen** |
 
-S is used for downward navigation. The shop shortcut is **B**, and **N no longer advances the month**.
-
-## Rotating shop: 20 possibilities
-
-The two shelves show **six distinct offers** drawn from a pool of **20 decorations**. Offers rotate after each monthly quota and reward sequence. Reopening the shop between months keeps its current offers.
-
-Press **R** or click the shop reroll button to refresh the shelves. The first refresh costs **$75**; each additional refresh that month costs **$25 more**. This fee resets in the next monthly shop and is independent of decision-card rerolls. A refresh introduces at least one new offer. Unaffordable refreshes change neither cash nor stock, and a sold-out pool does not charge a refresh fee.
-
-Decorations can be purchased once per run. Owned decorations are excluded from future draws. If fewer than six remain, some shelves are empty. If all twenty are owned, the shop safely displays empty slots and you can still press Space to continue.
-
-The pool includes the original plant, lamp, clock, art, lucky cat and fountain, plus a coffee machine, calendar, whiteboard, bookcase, fan, aquarium, standing desk, cork board, coin jar, printer, gold pen, meeting table, neon sign and executive chair. Their effects help demand, unit cost, overhead, capacity, stock, income, debt, risk, quality, share, rerolls or decisions. Each offer shows its price, rarity, short explanation and actual effect; **I** opens the full definition.
-
-## The game
-
-Choose one of six courses, one of ten topics, and one of three difficulties. Meet all quotas for **12 months** to win. The run follows:
-
-**Decisions → optional events → quota results → company news → booster → shop → next month.**
-
-The original statistics desk, short card explanations, card rarities, persistent quota/earnings panel, green/purple booster sidebar, and company-news events are included. Settings and finished results are saved to `data` beside the executable. Active runs are not saved.
+The six courses, 60 topics, three difficulties, funny short explanations, sloping statistics desk and active-booster sidebar are included. Settings and finished results are stored in `data` beside the executable.
 
 ## Verification
 
@@ -68,6 +87,6 @@ dotnet run --project TranslateUni.csproj -- --self-test
 dotnet run --project TranslateUni.csproj -- --preview
 ```
 
-Checks cover merged-guide navigation and practice, WASD controls, Space shop exit, all 20 decoration effects, rotating and paid shop refreshes, purchase guards, sold-out pools, card/booster behavior, rendering and saved results. All **180 course/topic/difficulty combinations** have a verified twelve-month victory path.
+Checks cover the animation's original three stages and timing, fullscreen-size rendering, all 20 families and five tier definitions, upgrade prices and effect replacement, normal/endless tier limits, victory unlocks, month-13 progression, compounded quotas, continued company events, and saved endless results. All **180 course/topic/difficulty combinations** have a verified normal victory path. The endless sample clears additional quotas and ends naturally when its growing targets exceed the company's results.
 
-Keep `course-data.json` with the source when rebuilding; it is embedded into the executable.
+Keep `course-data.json` with the project when rebuilding; it is embedded into the executable.

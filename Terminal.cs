@@ -85,6 +85,28 @@ public sealed class Canvas
         }
         Console.ResetColor();
     }
+    public void FlushRegions(IEnumerable<HitBox> regions)
+    {
+        foreach (HitBox region in regions)
+        for (int y = Math.Max(0, region.Y); y < Math.Min(Height, region.Y + region.Height); y++)
+        {
+            int left = Math.Max(0, region.X), right = Math.Min(Width - 1, region.X + region.Width);
+            if (right <= left) continue;
+            Console.SetCursorPosition(Console.WindowLeft + left, Console.WindowTop + y);
+            ConsoleColor? last = null; var text = new StringBuilder();
+            for (int x = left; x < right; x++)
+            {
+                if (colors[y, x] != last)
+                {
+                    if (text.Length > 0) { Console.Write(text.ToString()); text.Clear(); }
+                    Console.ForegroundColor = colors[y, x]; last = colors[y, x];
+                }
+                text.Append(cells[y, x]);
+            }
+            if (text.Length > 0) Console.Write(text.ToString());
+        }
+        Console.ResetColor();
+    }
 }
 
 public sealed class TerminalInput : IDisposable

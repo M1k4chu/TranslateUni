@@ -14,6 +14,8 @@ public static class Program
             if (args.Contains("--preview")) { Verification.Preview(courses); return 0; }
             if (Console.IsInputRedirected || Console.IsOutputRedirected)
             { Console.WriteLine("Run this game in an interactive terminal, or use --self-test."); return 1; }
+            if (FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
+            using var fullscreen = new ConsoleFullscreen(args.Contains("--windowed") || args.Contains("--host-fullscreen"));
             TryResize();
             using var input = new TerminalInput();
             Console.Title = "TranslateUni";
@@ -21,7 +23,7 @@ public static class Program
             Console.Clear();
             while (!app.Quit)
             {
-                int width = Math.Min(140, Console.WindowWidth), height = Math.Min(46, Console.WindowHeight);
+                int width = Console.WindowWidth, height = Console.WindowHeight;
                 Canvas frame = app.Render(width, height);
                 try { frame.Flush(); }
                 catch (ArgumentOutOfRangeException) { continue; } // The window was resized during drawing.
@@ -32,6 +34,7 @@ public static class Program
                     continue;
                 }
                 app.Handle(next, frame);
+                app.PlayPendingAnimation();
             }
             Console.Clear();
             return 0;
@@ -75,6 +78,13 @@ public sealed partial class GameApp
 
     public Canvas Render(int width, int height)
     {
+        if (width > 140 || height > 46)
+        {
+            Canvas core = Render(Math.Min(140, width), Math.Min(46, height));
+            var fullscreen = new Canvas(width, height);
+            fullscreen.Paste(core, (width - core.Width) / 2, (height - core.Height) / 2);
+            return fullscreen;
+        }
         var c = new Canvas(Game == null ? width : width - 30, height);
         if (width < 108 || height < 40)
         {
@@ -118,6 +128,7 @@ public sealed partial class GameApp
     }
     public void Handle(Input input, Canvas frame)
     {
+        inputFrame = frame; animationSource = null;
         notice = "";
         if (input.X >= 0)
         {
@@ -199,7 +210,7 @@ public sealed partial class GameApp
         if (Screen == Screen.Result && key == ConsoleKey.Enter) Activate("continue");
         else if (Screen == Screen.SpecialEvent && key == ConsoleKey.Enter) Activate("companyContinue");
         else if (Screen == Screen.End)
-        { if (key == ConsoleKey.R) StartRun(); else if (key == ConsoleKey.Enter) ReturnMain(); }
+        { if (key == ConsoleKey.R) StartRun(); else if (key == ConsoleKey.E) Activate("endless"); else if (key == ConsoleKey.Enter) ReturnMain(); }
         else if (Screen == Screen.Pause)
         { if (key is ConsoleKey.Enter or ConsoleKey.R) Screen = beforePause; else if (key == ConsoleKey.M) ReturnMain(); }
         else if (Screen == Screen.Settings)
@@ -244,10 +255,10 @@ public sealed partial class GameApp
                     Phase.Decisions => Game.Play(selected), Phase.Events => Game.TakeEvent(selected),
                     Phase.Booster => Game.ClaimBooster(selected), _ => false
                 };
-                if (played) { selected = -1; SyncScreen(); }
+                if (played) { animationSource = inputFrame; selected = -1; SyncScreen(); }
                 break;
             case "reroll":
-                if (Game?.Reroll() == true) selected = -1;
+                if (Game?.Reroll() == true) { animationSource = inputFrame; selected = -1; }
                 else notice = "No rerolls available in this phase.";
                 break;
             case "skip":
@@ -255,6 +266,7 @@ public sealed partial class GameApp
                 if (Game.Phase == Phase.Decisions) Game.FinishDecisions();
                 else if (Game.Phase == Phase.Events) Game.SkipEvents();
                 else if (Game.Phase == Phase.Booster) Game.SkipBooster();
+                if (Game.Phase != phaseBefore) animationSource = inputFrame;
                 selected = -1; SyncScreen(); break;
             case "continue": Game?.ContinueResult(); SyncScreen(); break;
             case "companyContinue": Game?.AcknowledgeCompanyEvent(); SyncScreen(); break;
@@ -268,6 +280,10 @@ public sealed partial class GameApp
             case "resume": Screen = beforePause; break;
             case "main": ReturnMain(); break;
             case "retry": StartRun(); break;
+            case "endless":
+                if (Game?.EnterEndless() == true) { recorded = false; selected = -1; SyncScreen(); }
+                else notice = "Clear all twelve quotas before choosing Endless.";
+                break;
             case "back": Back(); break;
             case "briefingPlay": browsing = false; Screen = Screen.Difficulty; break;
             case "settingDifficulty": storage.Preferences.Difficulty = (Difficulty)index; difficultyIndex = index; storage.SaveSettings(); break;
@@ -316,7 +332,11 @@ public sealed partial class GameApp
             default: ReturnMain(); break;
         }
     }
-    void ReturnMain() { Game = null; Screen = Screen.Main; notice = ""; tutorialStep = -1; }
+    void ReturnMain()
+    {
+        if (Game?.Endless == true && !recorded) storage.Record(Game);
+        Game = null; Screen = Screen.Main; notice = ""; tutorialStep = -1;
+    }
     static int Digit(ConsoleKey key) => key is >= ConsoleKey.D1 and <= ConsoleKey.D9 ? key - ConsoleKey.D1
         : key is >= ConsoleKey.NumPad1 and <= ConsoleKey.NumPad9 ? key - ConsoleKey.NumPad1
         : key is ConsoleKey.D0 or ConsoleKey.NumPad0 ? 9 : -1;
@@ -409,7 +429,8 @@ public sealed partial class GameApp
     {
         Run g = Game!; Forecast forecast = g.Preview();
         Header(c, events ? "EVENT PHASE - TAKE IT OR LEAVE IT" : "DECISION TABLE", $"{g.Course.Name} / {g.Lesson.Name}");
-        c.Text(3, 4, $"MONTH {g.Month}/12   Quotas met: {g.Cleared}/12   {g.Difficulty}", ConsoleColor.Yellow);
+        c.Text(3, 4, g.Endless ? $"ENDLESS MONTH {g.Month} | Bonus quotas: {g.Cleared - 12} | {g.Difficulty}"
+            : $"MONTH {g.Month}/12   Quotas met: {g.Cleared}/12   {g.Difficulty}", ConsoleColor.Yellow);
         c.Text(3, 5, $"Decisions left: {g.Actions}   Rerolls: {g.Rerolls}   Projected profit: ${forecast.Profit:N0}");
         c.Text(3, 6, "Quota + last earnings on the right. I: card details.", ConsoleColor.Cyan);
         for (int i = 0; i < 3; i++)
@@ -461,8 +482,8 @@ public sealed partial class GameApp
     void DrawResult(Canvas c)
     {
         Run g = Game!; MonthReport r = g.LastReport!; bool passed = r.Failures.Count == 0;
-        Header(c, passed ? "MONTH CLEARED" : "QUOTA MISSED", $"Month {r.Month} / 12");
-        c.Center(5, passed ? $"{g.Cleared} OF 12 QUOTAS MET" : "Every quota must be met to continue.", passed ? ConsoleColor.Green : ConsoleColor.Red);
+        Header(c, passed ? "MONTH CLEARED" : "QUOTA MISSED", g.Endless ? $"Endless month {r.Month}" : $"Month {r.Month} / 12");
+        c.Center(5, passed ? g.Endless ? $"{g.Cleared - 12} ENDLESS QUOTAS MET" : $"{g.Cleared} OF 12 QUOTAS MET" : "Every quota must be met to continue.", passed ? ConsoleColor.Green : ConsoleColor.Red);
         c.Text(6, 7, $"Units sold: {r.Sold}     Revenue: ${r.Revenue:N0}     Profit: ${r.Profit:N0}");
         c.Text(6, 8, $"Cash before reward: ${r.Cash:N0}    Service: {r.Service:F1}%");
         int y = 11;
@@ -473,7 +494,7 @@ public sealed partial class GameApp
             bool okay = !r.Failures.Contains(quota.Name);
             c.Text(6, y++, $"[{(okay ? "PASS" : "MISS")}] {quota.Name}: {Metric(quota.Name, value)} / {(quota.AtLeast ? ">=" : "<=")} {Metric(quota.Name, quota.Target)}", okay ? ConsoleColor.Green : ConsoleColor.Red);
         }
-        c.Center(20, passed ? g.Cleared == 12 ? "The twelfth month is cleared. Your company made it!"
+        c.Center(20, passed ? g.Cleared == 12 && !g.Endless ? "The twelfth month is cleared. Your company made it!"
             : "+$200 clear bonus. Next: company news, a booster, and the shop."
             : "Missed: " + string.Join(", ", r.Failures));
         c.Button((c.Width - 16) / 2, 23, "ENTER CONTINUE", "continue", selected: true);
@@ -505,15 +526,16 @@ public sealed partial class GameApp
             int x = left + i % 3 * 24, y = 5 + i / 3 * 11;
             if (i >= g.ShopOffers.Count)
             {
-                c.Text(x, y + 3, "No unowned stock", ConsoleColor.DarkGray);
+                c.Text(x, y + 3, "All tiers maxed", ConsoleColor.DarkGray);
                 c.Text(x, y + 10, "======================", ConsoleColor.DarkYellow);
                 continue;
             }
             Decoration item = g.ShopOffers[i];
-            ConsoleColor color = g.Owned.Contains(item.Id) ? ConsoleColor.DarkGray : i == shopIndex ? ConsoleColor.Yellow : ConsoleColor.White;
-            for (int row = 0; row < 3; row++) c.Text(x + 8, y + row, item.Art[row], color);
-            c.Text(x, y + 3, $"{i + 1}. {item.Name}", color);
-            c.Text(x, y + 4, g.Owned.Contains(item.Id) ? "OWNED" : "$" + item.Cost + " " + item.Rarity, color);
+            bool maxed = g.ShopTier(item.Id) >= item.Tier;
+            ConsoleColor color = maxed ? ConsoleColor.DarkGray : i == shopIndex ? ConsoleColor.Yellow : GameContent.Color(item.Rarity);
+            for (int row = 0; row < 2; row++) c.Text(x + 8, y + row, item.Art[row], color);
+            c.Wrapped(x, y + 2, $"{i + 1}. {item.Name}", 22, 2, color);
+            c.Text(x, y + 4, maxed ? $"MAX TIER {item.Tier}" : $"${item.Cost}  TIER {item.Tier}/{g.MaxShopTier}", color);
             c.Wrapped(x, y + 5, GameContent.DecorationFlavor(item.Id), 22, 3, ConsoleColor.Yellow);
             c.Wrapped(x, y + 8, item.Boost, 22, 2, color);
             c.Text(x, y + 10, "======================", ConsoleColor.DarkYellow);
@@ -533,8 +555,9 @@ public sealed partial class GameApp
     void DrawReward(Canvas c)
     {
         Run g = Game!;
-        Header(c, "BETWEEN MONTHS", $"{g.Cleared}/12 quotas cleared | Cash ${g.Cash:N0}");
-        c.Center(8, g.Message, ConsoleColor.Yellow);
+        Header(c, "BETWEEN MONTHS", g.Endless ? $"Endless | Month {g.Month} cleared | Cash ${g.Cash:N0}"
+            : $"{g.Cleared}/12 quotas cleared | Cash ${g.Cash:N0}");
+        c.Wrapped(5, 8, g.Message, c.Width - 10, 3, ConsoleColor.Yellow);
         c.Center(11, "Your booster choice has been settled for this month.");
         c.Center(13, "Visit the shop again, or begin the next month.");
         c.Button((c.Width - 22) / 2, 18, "B DECORATION SHOP", "shop");
@@ -544,14 +567,20 @@ public sealed partial class GameApp
     void DrawEnd(Canvas c)
     {
         Run g = Game!; bool won = g.Phase == Phase.Won;
-        Header(c, won ? "YOU WIN - A YEAR WELL RUN" : "RUN OVER", g.Course.Name + " / " + g.Lesson.Name);
-        c.Center(7, won ? "* * *  ALL 12 MONTHLY QUOTAS CLEARED  * * *" : $"{g.Cleared}/12 months cleared", won ? ConsoleColor.Green : ConsoleColor.Red);
+        Header(c, won ? "YOU WIN - A YEAR WELL RUN" : g.Endless ? "ENDLESS RUN ENDED" : "RUN OVER", g.Course.Name + " / " + g.Lesson.Name);
+        c.Center(7, won ? "* * *  ALL 12 MONTHLY QUOTAS CLEARED  * * *" : g.Endless ? $"Year cleared + {g.Cleared - 12} endless quotas"
+            : $"{g.Cleared}/12 months cleared", won ? ConsoleColor.Green : ConsoleColor.Red);
         c.Center(10, $"{g.Difficulty} chip | Total operating profit ${g.Reports.Sum(r => r.Profit):N0}");
         c.Center(12, $"Cash ${g.Cash:N0} | Decorations {g.Owned.Count} | Boosters {g.ActiveBoosts.Count}");
         if (!won) c.Center(15, "Missed: " + string.Join(", ", g.LastReport!.Failures));
+        if (won && !g.Endless)
+        {
+            c.Center(15, "ENDLESS: +35% quota per month; diamond and cosmic upgrades", ConsoleColor.Magenta);
+            c.Button((c.Width - 23) / 2, 17, "E CONTINUE ENDLESS", "endless", selected: true);
+        }
         c.Button((c.Width - 23) / 2, 20, "R RETRY SAME TOPIC", "retry");
         c.Button((c.Width - 23) / 2, 23, "ENTER MAIN MENU", "main", selected: true);
-        Footer(c, "R: Retry | ENTER / ESC: Main menu");
+        Footer(c, won ? "E: Endless | R: Retry | ENTER / ESC: Main menu" : "R: Retry | ENTER / ESC: Main menu");
     }
     void DrawPause(Canvas c)
     {
@@ -570,7 +599,7 @@ public sealed partial class GameApp
         for (int i = 0; i < recent.Count; i++)
         {
             RunRecord r = recent[i];
-            c.Text(4, 6 + i * 2, $"{(r.Won ? "WIN " : "LOSS")} {r.Cleared,2}/12 | {r.Difficulty,-6} | {r.Course} / {r.Topic}", r.Won ? ConsoleColor.Green : ConsoleColor.Gray);
+            c.Text(4, 6 + i * 2, $"{(r.Won ? "WIN " : "LOSS")} {(r.Endless ? $"12 + {Math.Max(0, r.Cleared - 12)} endless" : $"{r.Cleared}/12")} | {r.Difficulty} | {r.Course} / {r.Topic}", r.Won ? ConsoleColor.Green : ConsoleColor.Gray);
             c.Text(4, 7 + i * 2, $"{r.Finished:yyyy-MM-dd HH:mm} | Profit ${r.Profit:N0}", ConsoleColor.DarkGray);
         }
         Footer(c, "ESC: Main menu");
@@ -597,9 +626,9 @@ public sealed partial class GameApp
             "7. Monthly sales settle automatically. Meet EVERY displayed quota.",
             "8. After a clear, company news changes your next month; read its effects.",
             "9. Choose one FREE booster. Green and purple effects appear on the right.",
-            "10. Six shop offers rotate from twenty upgrades. R refreshes for cash.",
+            "10. Shop items start weak: upgrade them to tier 3. R refreshes shelves.",
             "11. SPACE leaves the shop and starts the next month. B revisits rewards.",
-            "12. Meet twelve monthly quotas to win. One missed month ends the run.",
+            "12. Clear twelve quotas, then E offers Endless: +35% targets, tiers 4-5.",
             "Common, Uncommon, Rare, Epic, Legendary: less common, more unusual.",
             "I explains a selected card. Click side boosters; PgUp/PgDn scrolls them.",
             "Profit includes sold-stock costs, ads, overhead, interest and events.",
