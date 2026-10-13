@@ -56,6 +56,8 @@ public sealed class Canvas
     }
     public string[] Lines() => Enumerable.Range(0, Height).Select(y =>
         new string(Enumerable.Range(0, Width).Select(x => cells[y, x]).ToArray())).ToArray();
+    public void Recolor(int x, int y, int width, ConsoleColor color)
+    { if (y < 0 || y >= Height) return; for(int i=Math.Max(0,x);i<Math.Min(Width,x+width);i++) colors[y,i]=color; }
     public ConsoleColor ColorAt(int x, int y) => colors[y, x];
     public void Paste(Canvas source, int left, int top)
     {
@@ -77,7 +79,7 @@ public sealed class Canvas
                 if (colors[y, x] != last)
                 {
                     if (text.Length > 0) { Console.Write(text.ToString()); text.Clear(); }
-                    Console.ForegroundColor = colors[y, x]; last = colors[y, x];
+                    GameTheme.Foreground(colors[y, x]); last = colors[y, x];
                 }
                 text.Append(cells[y, x]);
             }
@@ -99,7 +101,7 @@ public sealed class Canvas
                 if (colors[y, x] != last)
                 {
                     if (text.Length > 0) { Console.Write(text.ToString()); text.Clear(); }
-                    Console.ForegroundColor = colors[y, x]; last = colors[y, x];
+                    GameTheme.Foreground(colors[y, x]); last = colors[y, x];
                 }
                 text.Append(cells[y, x]);
             }
@@ -116,6 +118,7 @@ public sealed class TerminalInput : IDisposable
     readonly bool mouseEnabled;
     readonly bool cursorVisible;
     bool leftDown;
+    readonly InputReleaseGuard releaseGuard = new();
     public TerminalInput()
     {
         cursorVisible = OperatingSystem.IsWindows() ? Console.CursorVisible : true;
@@ -133,7 +136,8 @@ public sealed class TerminalInput : IDisposable
             if (!ReadConsoleInputW(handle, out InputRecord record, 1, out uint count)) return new(Console.ReadKey(true).Key);
             if (count == 0) continue;
             if (record.Type == 4) return new(); // Resize: repaint the current screen.
-            if (record.Type == 1 && record.KeyDown != 0) return new((ConsoleKey)record.VirtualKey);
+            if (record.Type == 1)
+            { ConsoleKey key=(ConsoleKey)record.VirtualKey; if(releaseGuard.Accept(key,record.KeyDown != 0)) return new(key); continue; }
             if (record.Type != 2) continue;
             bool pressed = (record.Buttons & 1) != 0;
             bool click = pressed && !leftDown && record.MouseFlags == 0;
@@ -141,6 +145,31 @@ public sealed class TerminalInput : IDisposable
             if (click) return new(X: record.MouseX - Console.WindowLeft, Y: record.MouseY - Console.WindowTop);
         }
     }
+    public void DiscardPending()
+    {
+        if (OperatingSystem.IsWindows() && handle != IntPtr.Zero && FlushConsoleInputBuffer(handle))
+        {
+            releaseGuard.Block(Enum.GetValues<ConsoleKey>().Where(key => (GetAsyncKeyState((int)key) & 0x8000) != 0));
+            leftDown = (GetAsyncKeyState(1) & 0x8000) != 0;
+            return;
+        }
+        while (Console.KeyAvailable) Console.ReadKey(true);
+    }
+    public string VerifyQueueBoundary()
+    {
+        if(!mouseEnabled) throw new InvalidOperationException("Native input mode is unavailable for this test.");
+        var queued=new[] { new InputRecord { Type=1, KeyDown=1, RepeatCount=5, VirtualKey=(ushort)ConsoleKey.Enter, Character='\r' }, new InputRecord { Type=1, KeyDown=1, RepeatCount=5, VirtualKey=(ushort)ConsoleKey.D1, Character='1' } };
+        if(!WriteConsoleInputW(handle,queued,(uint)queued.Length,out _)) throw new IOException("Could not queue input test records.");
+        DiscardPending();
+        var fresh=new[] { new InputRecord { Type=1, KeyDown=1, RepeatCount=1, VirtualKey=(ushort)ConsoleKey.F24 } };
+        if(!WriteConsoleInputW(handle,fresh,1,out _)) throw new IOException("Could not write fresh input record.");
+        Input next=Read(); DiscardPending();
+        if(next.Key!=ConsoleKey.F24) throw new InvalidOperationException("A stale input survived the screen boundary: "+next.Key);
+        return "PASS: queued Enter and number repeats discarded; fresh key accepted.";
+    }
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool WriteConsoleInputW(IntPtr input,InputRecord[] records,uint count,out uint written);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool FlushConsoleInputBuffer(IntPtr input);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
     public void Dispose()
     {
         if (mouseEnabled) SetConsoleMode(handle, originalMode);
@@ -151,7 +180,9 @@ public sealed class TerminalInput : IDisposable
     {
         [FieldOffset(0)] public ushort Type;
         [FieldOffset(4)] public int KeyDown;
+        [FieldOffset(8)] public ushort RepeatCount;
         [FieldOffset(10)] public ushort VirtualKey;
+        [FieldOffset(14)] public char Character;
         [FieldOffset(4)] public short MouseX;
         [FieldOffset(6)] public short MouseY;
         [FieldOffset(8)] public uint Buttons;

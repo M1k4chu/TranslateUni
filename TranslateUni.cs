@@ -14,6 +14,26 @@ public static class Program
             if (args.Contains("--self-test")) { Verification.SelfTest(courses); return 0; }
             if (args.Contains("--preview")) { Verification.Preview(courses); return 0; }
             DisplayDiagnostics.Capture();
+            if(args.Contains("--terminal-self-test"))
+            {
+                if(FullscreenLauncher.RelaunchIfAvailable(args)) return 0;
+                string report=Path.Combine(AppContext.BaseDirectory,"data","terminal-self-test.txt");
+                try
+                {
+                    using var testInput=new TerminalInput(); using var testTheme=new TerminalTheme();
+                    string check=testInput.VerifyQueueBoundary();
+                    bool visible=OperatingSystem.IsWindows() && NativeDisplay.IsWindowVisible(NativeDisplay.GetConsoleWindow());
+                    if(visible && !testTheme.PaletteApplied) throw new InvalidOperationException("Muted console palette was not applied.");
+                    Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+                    File.WriteAllText(report,check+"\nMuted classic-console palette verified: "+testTheme.PaletteApplied);
+                    FullscreenLauncher.Acknowledge(args,true); return 0;
+                }
+                catch(Exception ex)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(report)!); File.WriteAllText(report,"FAIL: "+ex.Message);
+                    FullscreenLauncher.Acknowledge(args,false); throw;
+                }
+            }
             if (args.Contains("--diagnose-display"))
             {
                 DisplayDiagnostics.Save();
@@ -39,6 +59,7 @@ public static class Program
             DisplayDiagnostics.LogConsoleSize();
             DisplayDiagnostics.Save();
             using var input = new TerminalInput();
+            using var theme = new TerminalTheme();
             Console.Title = "TranslateUni";
             var app = new GameApp(courses, new Storage());
             Console.Clear();
@@ -55,8 +76,10 @@ public static class Program
                     if (next.Key is ConsoleKey.Escape or ConsoleKey.Q) app.Exit();
                     continue;
                 }
+                int inputVersion = app.InputVersion;
                 app.Handle(next, frame);
                 app.PlayPendingAnimation();
+                if(app.InputVersion != inputVersion) input.DiscardPending();
             }
             Console.Clear();
             return 0;
@@ -140,17 +163,26 @@ public sealed partial class GameApp
             case Screen.TutorialIntro: DrawTutorialIntro(c); break;
             case Screen.TutorialComplete: DrawTutorialComplete(c); break;
         }
-        if (notice.Length > 0) c.Text(3, height - 3, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
-        else if (storage.Notice.Length > 0) c.Text(3, height - 3, storage.Notice, ConsoleColor.Yellow);
-        if (Game == null) return c;
+        if (notice.Length > 0) c.Text(3, Game == null ? height - 3 : 31, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
+        else if (storage.Notice.Length > 0) c.Text(3, Game == null ? height - 3 : 31, storage.Notice, ConsoleColor.Yellow);
+        if (Game == null) { GameTheme.ColorStatistics(c); return c; }
         DrawStats(c); // Persistent desk, shared by every screen in an active run.
         DrawTutorialHint(c);
+        GameTheme.ColorStatistics(c);
         var combined = new Canvas(width, height);
         combined.Paste(c, 0, 0);
-        combined.Paste(DrawSidebar(height), width - 30, 0);
+        Canvas sidebar = DrawSidebar(height); GameTheme.ColorStatistics(sidebar);
+        combined.Paste(sidebar, width - 30, 0);
         return combined;
     }
+    public int InputVersion { get; private set; }
     public void Handle(Input input, Canvas frame)
+    {
+        Screen previous = Screen; Phase? phase = Game?.Phase;
+        HandleCore(input, frame);
+        if(Screen != previous || Game?.Phase != phase || animationSource != null) InputVersion++;
+    }
+    void HandleCore(Input input, Canvas frame)
     {
         inputFrame = frame; animationSource = null; animationSelected = -1;
         notice = "";
@@ -169,7 +201,7 @@ public sealed partial class GameApp
         {
             loanIndex = Navigate(key, loanIndex, 3);
             int loanDigit = Digit(key); if (loanDigit is >= 0 and < 3) loanIndex = loanDigit;
-            if (key == ConsoleKey.Enter) Activate("loanTake", loanIndex);
+            if (key == ConsoleKey.Enter) { if(Game?.HasActiveLoan == true) Activate("loanRepay"); else if(Game?.CanBorrow == true) Activate("loanTake", loanIndex); }
             else if (key == ConsoleKey.P) Activate("loanRepay");
             return;
         }
@@ -282,10 +314,10 @@ public sealed partial class GameApp
             case "start": StartRun(); break;
             case "select": selected = index; break;
             case "loanTake":
-                if (Game?.TakeLoan(index) == true) { animationSource = inputFrame; animationSelected = loanIndex; Screen = beforeLoans; selected = -1; }
+                if (Game?.TakeLoan(index) == true) { animationSource = inputFrame; animationSelected = loanIndex; Screen = Screen.Loans; selected = -1; }
                 else notice = Game?.Message ?? "No active run.";
                 break;
-            case "loanRepay": Game?.RepayLoan(); notice = Game?.Message ?? ""; break;
+            case "loanRepay": if(Game?.RepayLoan() == true) InputVersion++; notice = Game?.Message ?? ""; break;
             case "loanBack": Screen = beforeLoans; break;
             case "loans": OpenLoans(); break;
             case "play":
@@ -311,9 +343,9 @@ public sealed partial class GameApp
                 selected = -1; SyncScreen(); break;
             case "continue": Game?.ContinueResult(); SyncScreen(); break;
             case "companyContinue": Game?.AcknowledgeCompanyEvent(); SyncScreen(); break;
-            case "buy": Game?.Buy(index); break;
+            case "buy": if(Game?.Buy(index) == true) InputVersion++; break;
             case "shopSelect": shopIndex = index; break;
-            case "shopReroll": if (Game?.RerollShop() == true) shopIndex = 0; break;
+            case "shopReroll": if (Game?.RerollShop() == true) { shopIndex = 0; InputVersion++; } break;
             case "lockedShop": notice = "The shop opens after clearing the month and choosing a booster."; break;
             case "shopBack": Screen = Screen.Reward; break;
             case "shop": if (Game?.Phase == Phase.Shop) Screen = Screen.Shop; break;
@@ -398,7 +430,8 @@ public sealed partial class GameApp
         c.Center(1, title, ConsoleColor.Cyan); c.Rule(2);
         if (subtitle.Length > 0) c.Center(3, subtitle, ConsoleColor.White);
     }
-    static void Footer(Canvas c, string text) { c.Rule(c.Height - 2); c.Text(3, c.Height - 1, text); }
+    void Footer(Canvas c, string text)
+    { if(Game != null) { c.Text(3, 30, text); c.Rule(39); } else { c.Rule(c.Height - 2); c.Text(3, c.Height - 1, text); } }
     void DrawMain(Canvas c)
     {
         c.Center(1, ".------------------------------------------------------.", ConsoleColor.DarkCyan);
@@ -489,7 +522,7 @@ public sealed partial class GameApp
         c.Button(c.Width - 10, 28, "B", "lockedShop");
         c.Button(3, 29, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
         c.Button(28, 29, events ? "ENTER TAKE" : "ENTER PLAY", "play");
-        c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
+        c.Text(3, 31, g.Message, ConsoleColor.Yellow);
         Footer(c, "1-3/WASD: Select | ENTER: Play | E: Skip | L: Loans | I: Info | ESC: Pause");
     }
     void DrawCard(Canvas c, int index, string title, string flavor, string[] lines, Rarity rarity, bool raised, ConsoleColor color)
@@ -552,34 +585,28 @@ public sealed partial class GameApp
         int left = (c.Width - 72) / 2;
         for (int i = 0; i < 6; i++)
         {
-            int x = left + i % 3 * 24, y = 5 + i / 3 * 11;
-            if (i >= g.ShopOffers.Count)
-            {
-                c.Text(x, y + 3, "All tiers maxed", ConsoleColor.DarkGray);
-                c.Text(x, y + 10, "======================", ConsoleColor.DarkCyan);
-                continue;
-            }
-            Decoration item = g.ShopOffers[i];
-            bool maxed = g.ShopTier(item.Id) >= item.Tier;
-            ConsoleColor color = maxed ? ConsoleColor.Green : i == shopIndex ? ConsoleColor.White : ConsoleColor.Cyan;
-            if (i == shopIndex) c.Text(x, y, "SELECTED", ConsoleColor.White);
-            for (int row = 0; row < 2; row++) c.Text(x + 8, y + row, item.Art[row], color);
-            c.Wrapped(x, y + 2, $"{i + 1}. {item.Name}", 22, 2, color);
-            c.Text(x, y + 4, maxed ? $"MAX TIER {item.Tier}" : $"${item.Cost}  TIER {item.Tier}/{g.MaxShopTier}", color);
-            c.Wrapped(x, y + 5, GameContent.DecorationFlavor(item.Id), 22, 3, maxed ? ConsoleColor.Green : ConsoleColor.Cyan);
-            c.Wrapped(x, y + 8, item.Boost, 22, 2, color);
-            c.Text(x, y + 10, "======================", ConsoleColor.DarkCyan);
-            c.Buttons.Add(new(x, y, 22, 10, "shopSelect", i));
+            int x=left+i%3*24, y=4+i/3*12;
+            bool selectedItem=i==shopIndex;
+            if(i>=g.ShopOffers.Count) { c.Text(x,y+3,"All tiers maxed",ConsoleColor.DarkGray); c.Box(x,y+9,22,3,ConsoleColor.DarkCyan); continue; }
+            Decoration item=g.ShopOffers[i]; bool maxed=g.ShopTier(item.Id)>=item.Tier;
+            ConsoleColor color=selectedItem?ConsoleColor.Magenta:maxed?ConsoleColor.Green:ConsoleColor.Cyan;
+            for(int row=0;row<2;row++) c.Text(x+8,y+row,item.Art[row],color);
+            c.Wrapped(x,y+2,$"{i+1}. {item.Name}",22,2,color);
+            if(maxed) c.Text(x,y+4,$"MAX TIER {item.Tier}",color);
+            else { string price=$"${item.Cost}"; c.Text(x,y+4,price,GameTheme.Statistic("cash")); c.Text(x+price.Length+1,y+4,$"TIER {item.Tier}/{g.MaxShopTier}",color); }
+            c.Wrapped(x,y+5,GameContent.DecorationFlavor(item.Id),22,2,color);
+            c.Wrapped(x,y+7,item.Boost,22,2,color);
+            c.Box(x,y+9,22,3,selectedItem?ConsoleColor.Magenta:maxed?ConsoleColor.Green:ConsoleColor.DarkCyan);
+            if(selectedItem) c.Text(x+5,y+10," SELECTED ",ConsoleColor.Magenta);
+            else if(maxed) c.Text(x+7,y+10,"MAXED",ConsoleColor.Green);
+            c.Buttons.Add(new(x,y,22,12,"shopSelect",i));
         }
-        c.Text(left + 2, 27, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
-        c.Text(left + 2, 28, "  |o  o|    Choose a decoration, then ENTER to buy.");
-
-
+        c.Text(left+2,28,"[o_o] Shopkeeper: Pick some office magic.",ConsoleColor.Gray);
         c.Button(left, 29, "ENTER BUY", "buy", shopIndex);
         c.Button(left + 19, 29, "B BACK", "shopBack");
         c.Button(left + 34, 29, "SPACE LEAVE SHOP", "next");
-        if (!g.Tutorial) c.Button(c.Width - 16, 27, $"R ${g.ShopRerollCost}", "shopReroll");
-        c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
+        if (!g.Tutorial) c.Button(c.Width - 16, 28, $"R ${g.ShopRerollCost}", "shopReroll");
+        c.Text(3, 31, g.Message, ConsoleColor.Yellow);
         Footer(c, "WASD/1-6: Select | ENTER: Buy | R: Reroll | SPACE: Next month");
     }
     void DrawReward(Canvas c)

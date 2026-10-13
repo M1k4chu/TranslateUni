@@ -15,7 +15,7 @@ public sealed partial class Run
     public bool CreditPhase => Phase is not (Phase.Won or Phase.Lost);
     public bool CanBorrow => CreditPhase && !HasActiveLoan && Month >= NextLoanMonth;
     public string LoanStatus => HasActiveLoan ? $"Active balance: ${Debt:N0}" : Month < NextLoanMonth
-        ? $"Next loan: month {NextLoanMonth} ({NextLoanMonth - Month} to wait)" : "Loan available";
+        ? $"Next loan: month {NextLoanMonth} ({NextLoanMonth - Month}mo)" : "Loan available";
     public List<LoanOffer> LoanOffers { get; } = [];
     public StatSnapshot MonthStartStats { get; private set; } = new(5000,0,25,450,12,18,500,80,25,100);
     public StatSnapshot CaptureStats() => new(Cash, Debt, Price, Inventory, UnitCost, Share, Capacity, Quality, Risk, Phase is Phase.Decisions or Phase.Events ? Preview().Service : LastReport?.Service ?? Preview().Service);
@@ -92,6 +92,25 @@ public sealed partial class GameApp
     void DrawLoans(Canvas c)
     {
         Run g = Game!;
+        if(g.HasActiveLoan)
+        {
+            Header(c,"LOAN REPAYMENT");
+            c.Center(10,$"Remaining to repay: ${g.Debt:N2}",GameTheme.Statistic("debt"));
+            c.Button((c.Width-22)/2,15,"ENTER PAY BACK","loanRepay",selected:g.Cash>0);
+            c.Button(c.Width-17,29,"ESC BACK","loanBack");
+            Footer(c,"ENTER / P: Pay back using cash | ESC: Back");
+            return;
+        }
+        if(!g.CanBorrow)
+        {
+            Header(c,"LOAN COOLDOWN");
+            int months=Math.Max(0,g.NextLoanMonth-g.Month);
+            c.Center(11,$"Next loan in {months} month{(months==1?"":"s")}",ConsoleColor.Cyan);
+            c.Center(13,$"Available in month {g.NextLoanMonth}",ConsoleColor.Gray);
+            c.Button(c.Width-17,29,"ESC BACK","loanBack");
+            Footer(c,"ESC: Back | Cooldown begins when the last loan is fully repaid");
+            return;
+        }
         Header(c, "THE LOAN DESK", g.LoanStatus);
         c.Center(4, "One loan at a time. Repay, then wait three months.", ConsoleColor.Cyan);
         c.Center(5, "Interest is a one-time fee, included in the total debt.");
@@ -102,7 +121,7 @@ public sealed partial class GameApp
             DrawCard(c, i, offer.Name, "Future you gets the bill", [$"Cash +${offer.Amount:N0}", $"Interest {offer.InterestRate:P1}", $"Fee ${offer.Fee:N0}", $"Repay ${offer.Total:N0}", "Fixed fee; no compounding"], (Rarity)i, loanIndex == i, ConsoleColor.Cyan);
         }
         c.Button(3, 29, "ENTER BORROW", "loanTake", loanIndex, g.CanBorrow);
-        c.Button(24, 29, "P REPAY", "loanRepay");
+
         c.Button(c.Width - 17, 29, "ESC BACK", "loanBack");
         Footer(c, "WASD/1-3: Select | ENTER: Borrow | P: Repay using cash | ESC: Back");
     }

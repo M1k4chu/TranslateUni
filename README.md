@@ -1,3 +1,19 @@
+# TranslateUni v5.5
+
+Run StartGame.cmd. This update includes all previous game content and loan rules.
+
+- The complete statistics board is two rows lower: changes at row 32, an empty row at 33, bars at 34-36, names at 37 and amounts at 38. At the 108x40 minimum layout, controls and messages now sit above the panel so nothing overlaps. Click a bar for its explanation.
+- Animations play at 80% of the previous speed (20% slower). Discards take about 498ms; selected-card movement, suction and star animation take 1250ms. The selected card still waits for the others to disappear before moving. The lowered suction point is preserved.
+- All statistic names and associated values use consistent colors across cards, quotas, messages, shop boosts, loan text and the statistics board. The game uses a softer RGB palette. The classic Windows console receives a temporary muted palette, which is restored on exit; terminal settings are not permanently changed.
+- Shop selections use a muted purple accent and a three-row SELECTED box on the shelf strip. Unselected items use teal, and completed upgrades use muted green.
+- Pending Windows keyboard/mouse input is discarded after screen changes, card animations, rerolls, shop purchases and loan transactions. Held keys must be released before they can activate the next screen.
+- After taking a loan, the loan desk stays open and shows the amount still owed and an ENTER/P PAY BACK button. Partial repayment leaves the remaining balance visible. After full repayment, the desk shows the months until the next available loan; offers return when the three-month cooldown expires. ESC returns to the previous gameplay screen.
+
+Validation: Release build without warnings; 6277 passing checks, including 180 complete campaigns. A native Windows console test verified removal of queued Enter/number repeats and application of the muted console palette. Rendered shop, repayment, cooldown and minimum-size statistics previews were inspected.
+
+Optional compatibility checks: DiagnoseDisplay.cmd or StartGame.cmd --terminal-self-test. Reports are saved beside the executable under data/.
+
+---
 # TranslateUni v5.4
 
 Run StartGame.cmd. Press L during a run to open the loan desk; choose with WASD/1-3 and ENTER. P pays as much of the balance as available cash allows. Click any statistics bar for its explanation and scale.

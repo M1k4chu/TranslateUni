@@ -114,6 +114,14 @@ public static class CardAnimation
                 result.Add(new(drawing, step == 4 ? 60 : 62, AnimationStage.Star, 0, 0) { Areas = areas });
             }
         }
+        int elapsed=0, previousDeadline=0;
+        for(int i=0;i<result.Count;i++)
+        {
+            elapsed+=result[i].Delay;
+            int deadline=(int)Math.Round(elapsed/0.8,MidpointRounding.AwayFromZero);
+            result[i]=result[i] with { Delay=deadline-previousDeadline };
+            previousDeadline=deadline;
+        }
         return result;
     }
     static void DrawCopy(Canvas drawing, Canvas source, HitBox card, int left, int top)
