@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35514.174 d17.12
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "econforge 1", "econforge 1.csproj", "{A6EE411A-0962-4557-AB8A-60A9FDED23CB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "teszt", "teszt.csproj", "{7CE54F3B-0DA6-47DB-91AC-61A83291B07D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +11,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{A6EE411A-0962-4557-AB8A-60A9FDED23CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A6EE411A-0962-4557-AB8A-60A9FDED23CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A6EE411A-0962-4557-AB8A-60A9FDED23CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A6EE411A-0962-4557-AB8A-60A9FDED23CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7CE54F3B-0DA6-47DB-91AC-61A83291B07D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CE54F3B-0DA6-47DB-91AC-61A83291B07D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CE54F3B-0DA6-47DB-91AC-61A83291B07D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CE54F3B-0DA6-47DB-91AC-61A83291B07D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
