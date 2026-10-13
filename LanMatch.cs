@@ -42,7 +42,7 @@ public sealed class TeamBallot
 }
 public sealed class LanMember(int id,PlayerIdentity identity,int team,GameApp view)
 {
-    public int Id {get;}=id; public PlayerIdentity Identity {get;}=identity; public int Team {get;}=team;
+    public int Id {get;}=id; public PlayerIdentity Identity {get;}=identity; public int Team {get;set;}=team;
     public GameApp View {get;}=view; public int Card=-1,Shop; public bool Connected=true;
     public int Width=172,Height=46,ScorePage,Color; public string Notice="";
     public List<AnimationFrame> Animation=[]; public DateTimeOffset AnimationStart;
@@ -70,7 +70,7 @@ public sealed partial class LanMatch
     {this.courses=courses;Mode=mode;Slots=slots;course=courses[courseIndex];this.topic=topic;this.difficulty=difficulty;this.seed=seed;}
     public LanMember Add(PlayerIdentity identity,int team)
     {
-        if(Started || team<0 || team>=Slots.Length || Members.Count(m=>m.Team==team&&m.Connected)>=Slots[team]) throw new InvalidOperationException("That team is full or the match has started.");
+        if(Started || team< -1 || team==-1&&Mode!=PlayMode.RivalryCoop || team>=Slots.Length || Members.Count(m=>m.Connected)>=8 || team>=0&&Members.Count(m=>m.Team==team&&m.Connected)>=Slots[team]) throw new InvalidOperationException("That team is full or the match has started.");
         string name=new(identity.Name.Where(c=>char.IsLetterOrDigit(c)||c is ' ' or '_' or '-').Take(14).ToArray());
         if(string.IsNullOrWhiteSpace(name) || Members.Any(m=>m.Connected&&m.Identity.Name.Equals(name,StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Use a unique player name.");
         var member=new LanMember(Members.Count,new(name,Math.Clamp(identity.Avatar,0,PlayerAvatars.All.Length-1)),team,new GameApp(courses,new Storage(Path.Combine(Path.GetTempPath(),"TranslateUni-LAN-"+Guid.NewGuid().ToString("N")))));
@@ -79,7 +79,7 @@ public sealed partial class LanMatch
     }
     public bool Start(DateTimeOffset now)
     {
-        if(Started || Slots.Where((count,team)=>Members.Count(m=>m.Team==team&&m.Connected)!=count).Any()) return false;
+        if(Started || Members.Any(m=>m.Connected&&m.Team<0) || Slots.Where((count,team)=>Members.Count(m=>m.Team==team&&m.Connected)!=count).Any()) return false;
         foreach(int count in Slots) Teams.Add(new(new Run(course,topic,difficulty,seed)));
         foreach(var member in Members) member.View.AttachLanRun(Teams[member.Team].Run);
         Started=true;DecisionDeadline=now.AddMinutes(3);Status="Decision phase";Revision++;return true;
@@ -91,7 +91,7 @@ public sealed partial class LanMatch
         var member=Members.Single(m=>m.Id==id); if(!member.Connected)return;
         if(member.Animation.Count>0)return;
         if(member.Width<140||member.Height<42){member.Notice="Resize to at least 140 x 42.";return;}
-        if(!Started){if(id==0 && input.Key==ConsoleKey.Enter) Start(now);return;}
+        if(!Started){HandleLobby(member,input,now);return;}
         if(input.Key is ConsoleKey.F7 or ConsoleKey.F8){member.ScorePage=Math.Max(0,member.ScorePage+(input.Key==ConsoleKey.F8?1:-1));return;}
         var team=Teams[member.Team];Run run=team.Run;
         member.View.LanSelection(member.Card,member.Shop);
@@ -335,7 +335,7 @@ public sealed partial class LanMatch
         {
             int row=y+4+Members.Skip(page*visible).Take(visible).ToList().IndexOf(member)*7;
             var color=PlayerColors[member.Color];for(int i=0;i<4;i++)c.Text(x+1,row+i,PlayerAvatars.All[member.Identity.Avatar][i],color);
-            c.Text(x+7,row,$"●{member.Color+1} {member.Identity.Name}",color);c.Text(x+7,row+1,$"Team {member.Team+1} "+(member.Connected?"":"OFFLINE"));
+            c.Text(x+7,row,$"●{member.Color+1} {member.Identity.Name}",color);c.Text(x+7,row+1,(member.Team<0?"Choosing team":$"Team {member.Team+1} ")+(member.Connected?"":"OFFLINE"));
             if(Started){var run=Teams[member.Team].Run;void item(int offset,string value,ConsoleColor ink)=>c.Text(x+7,row+offset,value[..Math.Min(24,value.Length)],ink);item(2,run.LastReport==null?"Month profit: --":$"M{run.LastReport.Month}: ${run.LastReport.Profit:N0}",color);item(3,$"Total: ${run.Reports.Sum(r=>r.Profit):N0}",ConsoleColor.Gray);var ballot=Teams[member.Team].Ballot;if(ballot.Votes.TryGetValue(member.Id,out var vote))item(4,vote.Label,color);}
         }
         c.Text(x+1,y+height-2,"F7/F8: Pages | Q: Leave");

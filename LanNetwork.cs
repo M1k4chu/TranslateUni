@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 namespace TranslateUni;
-public sealed record LanPacket(string Type,PlayerIdentity? Player=null,int Team=0,int Key=0,int X=-1,int Y=-1,int Width=172,int Height=46,int Id=-1,int Revision=0,string[]? Lines=null,int[]? Colors=null,string? Error=null,int TeamSize=0,string? RoomToken=null,PlayMode Mode=PlayMode.Singleplayer,int Protocol=1);
+public sealed record LanPacket(string Type,PlayerIdentity? Player=null,int Team=0,int Key=0,int X=-1,int Y=-1,int Width=172,int Height=46,int Id=-1,int Revision=0,string[]? Lines=null,int[]? Colors=null,string? Error=null,int TeamSize=0,string? RoomToken=null,PlayMode Mode=PlayMode.Singleplayer,int Protocol=2);
 public sealed class LanPeer : IDisposable
 {
     readonly TcpClient client; readonly StreamReader reader; readonly StreamWriter writer;readonly Stream transport;readonly int maxLineLength;
@@ -45,9 +45,23 @@ public sealed class LanPeer : IDisposable
 public static class LanMultiplayer
 {
     public const int Port=45873;
+    public static int HostingPort(string value)=>string.IsNullOrWhiteSpace(value)?Port:int.TryParse(value,out int port)&&port is >=1 and <=65535?port:throw new ArgumentException("Enter a hosting port from 1 to 65535, or leave it blank.");
+    public static TcpListener StartListener(int port,bool fallback)
+    {
+        for(int attempt=0;attempt<(fallback?11:1)&&port+attempt<=65535;attempt++)
+        {
+            var listener=new TcpListener(Socket.OSSupportsIPv6?IPAddress.IPv6Any:IPAddress.Any,port+attempt);
+            if(Socket.OSSupportsIPv6)listener.Server.DualMode=true;
+            listener.ExclusiveAddressUse=true;
+            try{listener.Start(8);return listener;}
+            catch(SocketException ex)when(ex.SocketErrorCode==SocketError.AddressAlreadyInUse&&fallback&&attempt<10&&port+attempt<65535){listener.Stop();}
+            catch{listener.Stop();throw;}
+        }
+        throw new SocketException((int)SocketError.AddressAlreadyInUse);
+    }
     public static void Open(List<Course> courses,PlayMode mode,PlayerIdentity profile,TerminalInput input)
     {
-        bool joining=false,online=false;string address="",error="";int course=0,topic=0,difficulty=0,joinTeam=mode==PlayMode.Coop?0:1;
+        bool joining=false,online=false;string address="",error="";int course=0,topic=0,difficulty=0;
         var counts=new PlayerCountSelection();
         try{if(Console.WindowWidth<140 && OperatingSystem.IsWindows()){int width=Math.Min(172,Console.LargestWindowWidth);Console.SetBufferSize(Math.Max(Console.BufferWidth,width),Console.BufferHeight);Console.SetWindowSize(width,Console.WindowHeight);}}catch(IOException){}catch(ArgumentOutOfRangeException){}
         while(true)
@@ -56,13 +70,12 @@ public static class LanMultiplayer
             int controlsX=Math.Max(3,(w-75)/2);
             c.Button(controlsX,4,"HOST","host",selected:!joining);c.Button(controlsX+12,4,"JOIN","join",selected:joining);
             c.Button(controlsX+24,4,online?"F6 ONLINE":"F6 LAN","network");c.Text(controlsX+42,4,"TAB: Host / Join | ESC: Back");
-            c.Center(6,joining?$"JOIN | Team {joinTeam+1}":$"HOST | {courses[course].Name} / {courses[course].Lessons[topic].Name} / {(Difficulty)difficulty}");
-            if(joining&&mode==PlayMode.RivalryCoop)c.Button(controlsX,8,$"F5 TEAM {joinTeam+1} - SWITCH","team");
-            else c.Center(8,joining?"Play the same mode as your host. Each player needs a unique name.":"F1: Course | F2: Topic | F3: Difficulty");
+            c.Center(6,joining?"JOIN A LOBBY":$"HOST | {courses[course].Name} / {courses[course].Lessons[topic].Name} / {(Difficulty)difficulty}");
+            c.Center(8,joining?"Play the same mode as your host. Each player needs a unique name.":"F1: Course | F2: Topic | F3: Difficulty");
             int[] slots=counts.Slots(mode);
-            counts.Draw(c,mode,joining,joinTeam);
+            counts.Draw(c,mode,joining,0);
             c.Center(20,online?(joining?"Paste the complete invite code from your host":"Type your public IP / DNS / VPN address, optionally :port"):joining?$"Type your host's LAN IP / name. Default port: {Port}.":"Create the lobby, then share your LAN address with the other players.");
-            c.Text(5,22,"Address / invite:",ConsoleColor.Cyan);
+            c.Text(5,22,!joining&&!online?"Hosting port (blank = 45873):":"Address / invite:",ConsoleColor.Cyan);
             int editWidth=Math.Max(20,w-10);string edit=address+"_";
             for(int row=0;row<4&&row*editWidth<edit.Length;row++)c.Text(5,23+row,edit.Substring(row*editWidth,Math.Min(editWidth,edit.Length-row*editWidth)),ConsoleColor.Cyan);
             if(online)c.Wrapped(5,28,"The host PC runs the server. For direct internet access, forward its TCP port to this PC and allow the game through the firewall. A shared VPN also works.",Math.Max(20,w-10),3);
@@ -70,37 +83,37 @@ public static class LanMultiplayer
             c.Button(controlsX,38,joining?"ENTER JOIN LOBBY":"ENTER CREATE LOBBY","connect",selected:true);c.Flush();
             Input key=input.Read();
             var setupHit=c.Buttons.LastOrDefault(b=>key.X>=b.X&&key.X<b.X+b.Width&&key.Y==b.Y);
-            if(setupHit?.Action is "host" or "join"){joining=setupHit.Action=="join";error="";input.DiscardPending();continue;}
+            if(setupHit?.Action is "host" or "join"){bool nextJoining=setupHit.Action=="join";if(nextJoining!=joining)address="";joining=nextJoining;error="";input.DiscardPending();continue;}
             if(setupHit?.Action=="network")key=new(ConsoleKey.F6);
-            if(setupHit?.Action=="team")key=new(ConsoleKey.F5);
+            
             if(setupHit?.Action=="connect")key=new(ConsoleKey.Enter);
             if(key.Key==ConsoleKey.Escape)return;
-            if(key.Key==ConsoleKey.Tab){joining=!joining;if(joining)address="";input.DiscardPending();continue;}
+            if(key.Key==ConsoleKey.Tab){joining=!joining;address="";error="";input.DiscardPending();continue;}
             if(key.Key==ConsoleKey.F6){online=!online;address="";error="";input.DiscardPending();continue;}
             if(key.Key==ConsoleKey.F1)course=(course+1)%courses.Count;if(key.Key==ConsoleKey.F2)topic=(topic+1)%10;if(key.Key==ConsoleKey.F3)difficulty=(difficulty+1)%3;
             if(counts.Handle(key,c,mode,joining))continue;
-            if(key.Key==ConsoleKey.F5&&joining&&mode==PlayMode.RivalryCoop)joinTeam=1-joinTeam;
-            if((joining||online)&&key.Key==ConsoleKey.Backspace&&address.Length>0)address=address[..^1];
-            else if((joining||online)&&key.Character>='!'&&key.Character<='~'&&address.Length<600)address+=key.Character;
+            
+            if(key.Key==ConsoleKey.Backspace&&address.Length>0)address=address[..^1];
+            else if(key.Character>='!'&&key.Character<='~'&&address.Length<600)address+=key.Character;
             if(key.Key!=ConsoleKey.Enter)continue;
             try
             {
                 input.DiscardPending();
                 c.Center(40,joining?"Connecting to your host...":"Creating your lobby...",ConsoleColor.Yellow);c.Flush();
-                if(joining)Join(address,profile,mode==PlayMode.Coop?0:joinTeam,input,mode==PlayMode.RivalryCoop?counts.First:0,mode,online);
+                if(joining)Join(address,profile,input,mode,online);
                 else Host(courses,mode,slots,course,topic,(Difficulty)difficulty,profile,input,online,address);
                 return;
             }
-            catch(Exception ex)when(ex is SocketException or IOException or InvalidOperationException or TimeoutException or ArgumentException or System.Security.Authentication.AuthenticationException or System.Security.Cryptography.CryptographicException or OperationCanceledException){error=ex is TimeoutException or OperationCanceledException?"Connection timed out. Check the address, TCP port forwarding / VPN, and firewall.":ex is System.Security.Authentication.AuthenticationException?"Server identity did not match the invite. Ask the host for the current complete code.":ex is System.Security.Cryptography.CryptographicException?"Unable to create secure room credentials. Restart the host and try again.":ex.Message;}
+            catch(Exception ex)when(ex is SocketException or IOException or InvalidOperationException or TimeoutException or ArgumentException or System.Security.Authentication.AuthenticationException or System.Security.Cryptography.CryptographicException or OperationCanceledException){error=ex is SocketException {SocketErrorCode:SocketError.AddressAlreadyInUse}?"That port is already hosting a server. Join the existing lobby, or choose another port (for example :45874 online).":ex is TimeoutException or OperationCanceledException?"Connection timed out. Check the address, TCP port forwarding / VPN, and firewall.":ex is System.Security.Authentication.AuthenticationException?"Server identity did not match the invite. Ask the host for the current complete code.":ex is System.Security.Cryptography.CryptographicException?"Unable to create secure room credentials. Restart the host and try again.":ex.Message;}
         }
     }
     static void Host(List<Course> courses,PlayMode mode,int[] slots,int course,int topic,Difficulty difficulty,PlayerIdentity profile,TerminalInput input,bool online,string address)
     {
         using var room=online?new OnlineRoom(address):null;
-        var match=new LanMatch(courses,mode,slots,course,topic,difficulty,GameSeeds.New());var local=match.Add(profile,0);
-        int port=room?.Invite.Port??Port;
-        var listener=new TcpListener(Socket.OSSupportsIPv6?IPAddress.IPv6Any:IPAddress.Any,port);if(Socket.OSSupportsIPv6)listener.Server.DualMode=true;
-        listener.Start(8);var peers=new Dictionary<LanPeer,int>();var pending=new Dictionary<TcpClient,Task<LanPeer>>();var accepted=new Dictionary<LanPeer,DateTimeOffset>();DateTimeOffset lastSend=DateTimeOffset.MinValue;
+        var match=new LanMatch(courses,mode,slots,course,topic,difficulty,GameSeeds.New());var local=match.Add(profile,mode==PlayMode.RivalryCoop?-1:0);
+        var listener=StartListener(room?.Invite.Port??HostingPort(address),!online);
+        int port=((IPEndPoint)listener.LocalEndpoint).Port;
+        var peers=new Dictionary<LanPeer,int>();var pending=new Dictionary<TcpClient,Task<LanPeer>>();var accepted=new Dictionary<LanPeer,DateTimeOffset>();DateTimeOffset lastSend=DateTimeOffset.MinValue;
         try
         {
             while(true)
@@ -128,10 +141,9 @@ public static class LanMultiplayer
                             try
                             {
                                 if(room!=null&&!room.Invite.Allows(message.RoomToken))throw new InvalidOperationException("Invite code rejected. Ask the host for the current code.");
-                                if(message.Protocol!=1||message.Mode!=mode)throw new InvalidOperationException("Select the same multiplayer mode and game version as the host.");
+                                if(message.Protocol!=2||message.Mode!=mode)throw new InvalidOperationException("Select the same multiplayer mode and game version as the host.");
                                 if(match.Started)throw new InvalidOperationException("The match has already started. Join the next lobby.");
-                                if(mode==PlayMode.RivalryCoop && message.Team==1 && message.TeamSize is >=1 and <=4 && match.Members.All(m=>m.Team!=1||!m.Connected))match.Slots[1]=message.TeamSize;
-                                var member=match.Add(message.Player??new("Player"),message.Team);member.Width=Math.Clamp(message.Width,1,300);member.Height=Math.Clamp(message.Height,1,100);peers[peer]=member.Id;peer.Send(new("welcome",Id:member.Id));
+                                var member=match.Add(message.Player??new("Player"),mode==PlayMode.RivalryCoop?-1:mode==PlayMode.Coop?0:1);member.Width=Math.Clamp(message.Width,1,300);member.Height=Math.Clamp(message.Height,1,100);peers[peer]=member.Id;peer.Send(new("welcome",Id:member.Id));
                             }
                             catch(InvalidOperationException ex){peer.Send(new("error",Error:ex.Message));peer.Dispose();}
                             break;
@@ -152,7 +164,7 @@ public static class LanMultiplayer
                 Canvas frame=match.Render(0,Console.WindowWidth,Console.WindowHeight,DateTimeOffset.UtcNow);
                 if(!match.Started)
                 {
-                    frame.Text(3,frame.Height-3,"Host LAN IP: "+Addresses()+$" | TCP port {port} | Q: Exit");
+                    frame.Text(3,frame.Height-3,"Join address: "+Addresses(port)+" | Q: Exit");
                     if(room!=null)
                     {
                         int left=32+Math.Max(0,(frame.Width-Math.Min(172,frame.Width))/2),top=Math.Max(0,(frame.Height-Math.Min(46,frame.Height))/2);
@@ -160,7 +172,6 @@ public static class LanMultiplayer
                         int codeWidth=Math.Max(20,Math.Min(140,frame.Width-32)-6);string code=room.Invite.Code;
                         for(int row=0;row<5&&row*codeWidth<code.Length;row++)frame.Text(left+3,top+24+row,code.Substring(row*codeWidth,Math.Min(codeWidth,code.Length-row*codeWidth)),ConsoleColor.Cyan);
                         frame.Wrapped(left+3,top+30,$"Share the complete code with your players. Forward TCP {port} to this PC (or use a shared VPN). Hosting stays on this computer.",Math.Min(140,frame.Width-32)-6,4);
-                        frame.Text(left+3,top+34,"F9: Save invite to data/online-invite.txt");
                     }
                 }
                 try{frame.Flush();}catch(ArgumentOutOfRangeException){continue;}
@@ -169,13 +180,13 @@ public static class LanMultiplayer
         }
         finally{foreach(var peer in peers.Keys){peer.Send(new("error",Error:"Host closed the match."));peer.Dispose();}foreach(var handshake in pending){handshake.Key.Dispose();_ = handshake.Value.ContinueWith(t=>{if(t.IsCompletedSuccessfully)t.Result.Dispose();else _ = t.Exception;});}listener.Stop();input.DiscardPending();}
     }
-    static string Addresses(){try{return string.Join(", ",Dns.GetHostAddresses(Dns.GetHostName()).Where(ip=>ip.AddressFamily==AddressFamily.InterNetwork&&!IPAddress.IsLoopback(ip)));}catch(SocketException){return "check Windows network settings";}}
-    static void Join(string address,PlayerIdentity profile,int team,TerminalInput input,int teamSize,PlayMode mode,bool online)
+    static string Addresses(int port){try{return string.Join(", ",Dns.GetHostAddresses(Dns.GetHostName()).Where(ip=>ip.AddressFamily==AddressFamily.InterNetwork&&!IPAddress.IsLoopback(ip)).Select(ip=>$"{ip}:{port}"));}catch(SocketException){return "check Windows network settings";}}
+    static void Join(string address,PlayerIdentity profile,TerminalInput input,PlayMode mode,bool online)
     {
         OnlineInvite? invite=online?OnlineInvite.Parse(address):null;LanPeer connection;
         if(invite!=null)connection=OnlineTransport.Connect(invite).GetAwaiter().GetResult();
         else {var endpoint=OnlineInvite.Endpoint(address);var client=new TcpClient();try{client.ConnectAsync(endpoint.Host,endpoint.Port).WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();connection=new LanPeer(client);}catch{client.Dispose();throw;}}
-        using var peer=connection;peer.Send(new("hello",profile,team,Width:Console.WindowWidth,Height:Console.WindowHeight,TeamSize:teamSize,RoomToken:invite?.Token,Mode:mode));int revision=-1,lastWidth=Console.WindowWidth,lastHeight=Console.WindowHeight;Canvas? frame=null;DateTimeOffset lastFrame=DateTimeOffset.UtcNow;
+        using var peer=connection;peer.Send(new("hello",profile,Width:Console.WindowWidth,Height:Console.WindowHeight,RoomToken:invite?.Token,Mode:mode));int revision=-1,lastWidth=Console.WindowWidth,lastHeight=Console.WindowHeight;Canvas? frame=null;DateTimeOffset lastFrame=DateTimeOffset.UtcNow;
         while(!peer.Closed)
         {
             while(peer.Inbox.TryDequeue(out var packet))
@@ -195,4 +206,5 @@ public static class LanMultiplayer
         throw new IOException("Disconnected from the host.");
     }
 }
+
 

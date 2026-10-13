@@ -1,10 +1,16 @@
-# TranslateUni v6.3
+# TranslateUni v6.4
 
 Extract this folder and run StartGame.cmd. Windows 10 and 11 are supported; the .NET 8 runtime is required. A compiled build is included in play/. Open TranslateUni.sln to edit the source.
 
+## Team selection inside the lobby in v6.4
+
+Team selection appears only in Rivalry CO-OP, after connecting to the lobby. Both hosts and guests can inspect the rosters and use 1 / 2 or click JOIN TEAM to choose a company. The first player on each team is its captain and can adjust its slots with the lobby +/- buttons (1-4 players, never fewer than the teammates already present). Players may switch to another team with space before the game starts. The host cannot start while a connected player is still choosing a team. CO-OP and two-player Rivalry assign companies automatically.
+
+LAN hosting now accepts an optional port and tries up to ten nearby alternatives if that port is occupied. Share the full IP:port address shown in the lobby so guests connect to the correct server. Online hosting retains its exact invite port; if occupied, join the existing host or use a different port in the public-address field and forward that port. Failed listeners are closed. Everyone must use v6.4: its updated lobby protocol rejects older versions.
+
 ## Joining, waiting and neutral voting in v6.3
 
-Host / Join, LAN / Online and Connect have clickable buttons. Player counts use visible +/- buttons, LEFT / RIGHT to adjust and UP / DOWN to choose a team. Counts include yourself. CO-OP guests simply join the host's shared company; Rivalry CO-OP captains can set their own team's size. The lobby shows team rosters, empty slots, your team, course and difficulty, the exact number of missing players and when guests are waiting for the host to start.
+Host / Join, LAN / Online and Connect have clickable buttons. Player counts use visible +/- buttons, LEFT / RIGHT to adjust and UP / DOWN to choose a team. Counts include yourself. CO-OP guests simply join the host's shared company; Rivalry CO-OP captains set their own team's size inside the lobby. The lobby shows team rosters, empty slots, your team, course and difficulty, the exact number of missing players and when guests are waiting for the host to start.
 
 N / NO VOTE opposes the current proposal. V / SKIP VOTE stays neutral: it counts as a submitted response, so everyone can finish voting early, but adds no vote for or against any option. Players can change either response before voting finishes. If everyone stays neutral, only the ballot is cleared; the cards, actions, statistics and phase remain unchanged. E retains its explicit skip/end-phase behavior.
 
@@ -33,9 +39,9 @@ Multiplayer works between separate computers. Each player runs this version of t
 
 - CO-OP: 2-8 players share one company and vote on decisions, optional events, boosters, shop purchases, rerolls, loans, repayments and advancing to the next month.
 - Rivalry: two players each run an independent company, starting with the same course, topic, difficulty and random seed.
-- Rivalry CO-OP: two competing companies, each controlled by a voting team of 1-4 players. The host uses the +/- controls to set both team counts. The first player joining Team 2 can set that team's count before joining, overriding the host's initial count. Teams may have different counts.
+- Rivalry CO-OP: two competing companies, each controlled by a voting team of 1-4 players. The host uses the +/- controls to set both team counts. The first player to choose each team becomes its captain and can adjust that team's count inside the lobby. Teams may have different counts.
 
-The host selects the course (F1), topic (F2) and difficulty (F3). In the lobby, ENTER starts the match after all chosen slots are filled. Player names must be unique. Rivalry guests join Team 2; Rivalry CO-OP guests choose their team with F5. CO-OP guests join the shared team.
+The host selects the course (F1), topic (F2) and difficulty (F3). In the lobby, ENTER starts the match after all chosen slots are filled. Player names must be unique. Rivalry guests join Team 2; Rivalry CO-OP players choose their team inside the lobby with 1 / 2 or JOIN TEAM. CO-OP guests join the shared team.
 
 ## LAN connection
 
@@ -46,7 +52,7 @@ On one computer choose Host and press ENTER. Its lobby shows local IP addresses 
 1. Host: press F6 for Online. Type your public IP address, DNS name, or shared VPN address. An optional :port changes the server's listening port; otherwise it uses TCP 45873. Select course/topic/difficulty and team counts, then press ENTER.
 2. For direct internet hosting, forward that TCP port on your router to the host PC's local IP and allow inbound connections to the game in Windows Firewall. Keep the host PC and game running. IPv4 and IPv6/DNS endpoints are supported. IPv6 typically needs an inbound firewall allowance rather than IPv4 NAT forwarding.
 3. The lobby displays a translateuni:// invite code. F9 saves the complete code to play/data/online-invite.txt in the compiled build. Share that code with your players.
-4. Guests: select the matching mode, switch to Online with F6 and Join with TAB, and paste the entire invite code. In Windows Terminal use Ctrl+Shift+V; in a classic console use Ctrl+V. Choose the joining team and any captain's team count, then press ENTER.
+4. Guests: select the matching mode, switch to Online with F6 and Join with TAB, and paste the entire invite code. In Windows Terminal use Ctrl+Shift+V; in a classic console use Ctrl+V. Press ENTER to connect. In Rivalry CO-OP, choose your team after the lobby appears.
 5. The host presses ENTER when the lobby is full.
 
 Connections use managed TLS 1.2 with ECDHE and AES-GCM. The invitation pins the host's SHA-256 certificate fingerprint and contains a random room secret. A new host session creates a new invitation. Credentials stay in memory; nothing is installed in Windows certificate or key stores. Bouncy Castle 2.7.0 and its MIT license are included.
@@ -77,9 +83,10 @@ If Windows Terminal is unavailable or its launch fails, the game falls back to a
 
 ## Validation
 
-Release build: zero warnings/errors. Self-test: 7,798 checks, including all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
+Release build: zero warnings/errors. Self-test: 7,813 checks, including all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
 
 Internet routing between two physical computers and the Windows 11 GUI path need confirmation on those machines; local socket/TLS tests do not verify a router's port forwarding or a particular Windows 11 installation.
+
 
 
 
