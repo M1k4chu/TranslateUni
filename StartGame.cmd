@@ -1,8 +1,8 @@
 @echo off
 cd /d "%~dp0"
-if exist "play\BusinessGameV3.exe" (
-    "play\BusinessGameV3.exe"
+if exist "play\TranslateUni.exe" (
+    "play\TranslateUni.exe"
 ) else (
-    dotnet run --project "%~dp0BusinessGameV3.csproj" --configuration Release
+    dotnet run --project "%~dp0TranslateUni.csproj" --configuration Release
 )
 if errorlevel 1 pause

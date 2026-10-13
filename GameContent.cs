@@ -1,4 +1,4 @@
-namespace BusinessGame;
+namespace TranslateUni;
 
 public static class GameContent
 {
@@ -94,9 +94,17 @@ public static class GameContent
     {
         0 => "Leafy coworker attracts more customers", 1 => "Bright ideas, smaller production bills",
         2 => "More time for questionable decisions", 3 => "Inspirational words somehow print money",
-        4 => "Tiny cat bullies bad luck", _ => "Relaxed office, smaller overhead bills"
+        4 => "Tiny cat bullies bad luck", 5 => "Relaxed office, smaller overhead bills",
+        6 => "Caffeinated humans make fewer mistakes", 7 => "Dates somehow summon free boxes",
+        8 => "Ideas stop hiding in brains", 9 => "Books taught supplies to economize",
+        10 => "Cool air, cooler running bills", 11 => "Fish judge your business politely",
+        12 => "Standing humans work slightly faster", 13 => "Sticky notes attract loyal buyers",
+        14 => "Loose change got a job", 15 => "Printer spits out bonus boxes",
+        16 => "Fancy signatures squeeze extra profit", 17 => "Meetings finally did something useful",
+        18 => "Bright letters lure curious wallets", _ => "Boss chair unlocks extra decisions"
     };
     public static ConsoleColor Color(Rarity rarity) => rarity switch
     { Rarity.Common => ConsoleColor.Gray, Rarity.Uncommon => ConsoleColor.Green, Rarity.Rare => ConsoleColor.Cyan,
         Rarity.Epic => ConsoleColor.Magenta, _ => ConsoleColor.Yellow };
 }
+

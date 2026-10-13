@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 
-namespace BusinessGame;
+namespace TranslateUni;
 
 // These records read data exported from EconForge. No EconForge engine is used.
 public sealed record Course(string Name, List<Lesson> Lessons);
@@ -25,8 +25,8 @@ public static class Catalog
 {
     public static List<Course> Load()
     {
-        using Stream data = Assembly.GetExecutingAssembly().GetManifestResourceStream("BusinessGame.CourseData")
-            ?? throw new InvalidOperationException("Course data is missing. Build using BusinessGameV3.csproj.");
+        using Stream data = Assembly.GetExecutingAssembly().GetManifestResourceStream("TranslateUni.CourseData")
+            ?? throw new InvalidOperationException("Course data is missing. Build using TranslateUni.csproj.");
         List<Course> courses = JsonSerializer.Deserialize<List<Course>>(data)
             ?? throw new InvalidOperationException("Course data is empty.");
         if (courses.Count != 6 || courses.Any(c => c.Lessons.Count != 10))
@@ -34,3 +34,4 @@ public static class Catalog
         return courses;
     }
 }
+

@@ -1,4 +1,4 @@
-namespace BusinessGame;
+namespace TranslateUni;
 
 public enum Difficulty { Easy, Normal, Hard }
 public enum Phase { Decisions, Events, Result, SpecialEvent, Booster, Shop, Won, Lost }
@@ -18,7 +18,7 @@ public sealed record Booster(string Name, string Description, int Id, Rarity Rar
     BoosterFamily Family = BoosterFamily.Green, bool Persistent = true);
 public sealed record ActiveBooster(Booster Card, int Stacks = 1);
 public sealed record CompanyEvent(string Name, string Flavor, string Description, int Id, Rarity Rarity = Rarity.Common);
-public sealed record Decoration(string Name, int Cost, string Boost, string[] Art, int Id);
+public sealed record Decoration(string Name, int Cost, string Boost, string[] Art, int Id, Rarity Rarity = Rarity.Common);
 public sealed record Quota(string Name, double Target, bool AtLeast = true);
 public sealed record MonthReport(int Month, double Revenue, double Profit, int Sold, double Service,
     double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures);
@@ -51,6 +51,9 @@ public sealed class Run
     public List<EventCard> Events { get; private set; } = [];
     public List<Booster> Boosters { get; private set; } = [];
     public HashSet<int> Owned { get; } = [];
+    public List<Decoration> ShopOffers { get; private set; } = [];
+    public int ShopRerolls { get; private set; }
+    public int ShopRerollCost => 75 + ShopRerolls * 25;
     public List<ActiveBooster> ActiveBoosts { get; } = [];
     public CompanyEvent? CompanyNews { get; private set; }
     public List<CompanyEvent> NewsHistory { get; } = [];
@@ -72,7 +75,21 @@ public sealed class Run
         new("Wall Clock", 550, "+1 decision each month", [".---.", "| / |", "'---'"], 2),
         new("Motivation Art", 350, "+$1 per unit sold", ["+---+", "|UP!|", "+---+"], 3),
         new("Lucky Cat", 400, "+1 reroll each month", ["/\\_/\\", "(o.o)", " /|_ "], 4),
-        new("Desk Fountain", 400, "Overhead -$60/month", [" ~|~ ", "(_|_)", "[___]"], 5)
+        new("Desk Fountain", 400, "Overhead -$60/month", [" ~|~ ", "(_|_)", "[___]"], 5),
+        new("Coffee Machine", 450, "Capacity +40; quality +3", ["[~~~]", "|[_]|", "'---'"], 6),
+        new("Desk Calendar", 350, "+20 free stock/month", ["+---+", "| 12|", "+---+"], 7),
+        new("Whiteboard", 425, "Risk -6; quality +4", ["+---+", "|A+B|", "+---+"], 8),
+        new("Bookcase", 500, "Unit cost -$0.30", ["|I||I", "|_||_", "|I||I"], 9, Rarity.Uncommon),
+        new("Desk Fan", 375, "Overhead -$40/month", ["\\ | /", "--O--", " /|\\ "], 10),
+        new("Office Aquarium", 650, "Quality +8; demand +2%", ["+---+", "|><>|", "+---+"], 11, Rarity.Uncommon),
+        new("Standing Desk", 550, "Capacity +60", ["_____", " | | ", "_| |_"], 12),
+        new("Cork Board", 450, "Share +0.5%", ["+---+", "|* *|", "+---+"], 13),
+        new("Coin Jar", 600, "+$50 income/month", [" ___ ", "($$$)", "'---'"], 14, Rarity.Uncommon),
+        new("Office Printer", 675, "+30 free stock/month", [" ___ ", "[===]", " [_] "], 15, Rarity.Uncommon),
+        new("Gold Pen", 750, "+$0.75 per unit sold", ["   / ", "  /  ", " /_  "], 16, Rarity.Rare),
+        new("Meeting Table", 800, "Debt -$400; risk -4", ["_____", "|___|", " | | "], 17, Rarity.Uncommon),
+        new("Neon Sign", 850, "+8% demand/month", ["+---+", "|OPEN", "+---+"], 18, Rarity.Rare),
+        new("Executive Chair", 1000, "+1 decision/month", ["[___]", "|___|", " _|_ "], 19, Rarity.Rare)
     ];
     public static readonly Booster[] BoosterPool =
     [
@@ -443,17 +460,17 @@ public sealed class Run
             TrackBooster(gift);
             Message += ". Tutorial gift: " + gift.Name + ".";
         }
-        Phase = Phase.Shop; return true;
+        Phase = Phase.Shop; DealShop(); return true;
     }
     public bool SkipBooster()
     {
         if (Phase != Phase.Booster) return false;
-        BoosterClaimed = true; Phase = Phase.Shop; Message = "Booster skipped."; return true;
+        BoosterClaimed = true; Phase = Phase.Shop; DealShop(); Message = "Booster skipped."; return true;
     }
     public bool Buy(int index)
     {
-        if (Phase != Phase.Shop || index < 0 || index >= Decorations.Length) return false;
-        Decoration item = Decorations[index];
+        if (Phase != Phase.Shop || index < 0 || index >= ShopOffers.Count) return false;
+        Decoration item = ShopOffers[index];
         if (Owned.Contains(item.Id)) { Message = "Already owned: " + item.Name; return false; }
         if (Cash < item.Cost) { Message = "Not enough cash for " + item.Name; return false; }
         Cash -= item.Cost; Owned.Add(item.Id);
@@ -465,8 +482,44 @@ public sealed class Run
             case 3: marginBonus += 1; break;
             case 4: extraRerolls++; break;
             case 5: fixedDiscount += 60; break;
+            case 6: Capacity += 40; Quality = Math.Min(100, Quality + 3); break;
+            case 7: stockBonus += 20; break;
+            case 8: Risk = Math.Max(0, Risk - 6); Quality = Math.Min(100, Quality + 4); break;
+            case 9: UnitCost = Math.Max(3, UnitCost - 0.3); break;
+            case 10: fixedDiscount += 40; break;
+            case 11: Quality = Math.Min(100, Quality + 8); demandBonus += 0.02; break;
+            case 12: Capacity += 60; break;
+            case 13: Share = Math.Min(60, Share + 0.5); break;
+            case 14: pendingIncome += 50; break;
+            case 15: stockBonus += 30; break;
+            case 16: marginBonus += 0.75; break;
+            case 17: Debt = Math.Max(0, Debt - 400); Risk = Math.Max(0, Risk - 4); break;
+            case 18: demandBonus += 0.08; break;
+            case 19: extraActions++; break;
         }
         Message = "Bought " + item.Name + ". " + item.Boost;
+        return true;
+    }
+    void DealShop()
+    {
+        ShopRerolls = 0;
+        ShopOffers = Tutorial ? Decorations.Take(6).ToList()
+            : Weighted(Decorations.Where(item => !Owned.Contains(item.Id)), item => item.Rarity, 6);
+    }
+    public bool RerollShop()
+    {
+        if (Phase != Phase.Shop) return false;
+        List<Decoration> available = Decorations.Where(item => !Owned.Contains(item.Id)).ToList();
+        if (available.All(item => ShopOffers.Any(offer => offer.Id == item.Id)))
+        { Message = "Every remaining decoration is already on the shelves."; return false; }
+        int cost = ShopRerollCost;
+        if (Cash < cost) { Message = $"Not enough cash: shop reroll costs ${cost}."; return false; }
+        List<Decoration> newOffers = Weighted(available, item => item.Rarity, 6);
+        // At least one previously unseen offer appears, even if a weighted draw repeats all six.
+        if (newOffers.All(item => ShopOffers.Any(offer => offer.Id == item.Id)))
+            newOffers[^1] = Weighted(available.Where(item => ShopOffers.All(offer => offer.Id != item.Id)), item => item.Rarity, 1)[0];
+        Cash -= cost; ShopRerolls++; ShopOffers = newOffers;
+        Message = $"Shop refreshed for ${cost}. Next reroll: ${ShopRerollCost}.";
         return true;
     }
     public bool NextMonth()
@@ -545,3 +598,4 @@ public sealed class Run
         return list;
     }
 }
+

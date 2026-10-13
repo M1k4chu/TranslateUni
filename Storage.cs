@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace BusinessGame;
+namespace TranslateUni;
 
 public sealed record RunRecord(string Course, string Topic, Difficulty Difficulty, int Cleared, bool Won, double Profit, DateTimeOffset Finished);
 public sealed class Preferences
@@ -49,3 +49,4 @@ public sealed class Storage
         Save("runs.json", History);
     }
 }
+

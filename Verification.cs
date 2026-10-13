@@ -1,4 +1,4 @@
-namespace BusinessGame;
+namespace TranslateUni;
 
 public static class Verification
 {
@@ -19,7 +19,8 @@ public static class Verification
         }
         foreach (Booster card in Run.BoosterPool) Check(GameContent.Flavor(card).Split(' ').Length <= 5, "booster explanation word limit");
         foreach (CompanyEvent e in Run.CompanyEventPool) Check(e.Flavor.Split(' ').Length <= 5, "company headline word limit");
-        foreach (int id in Enumerable.Range(0, 6)) Check(GameContent.DecorationFlavor(id).Split(' ').Length <= 5, "shop explanation word limit");
+        foreach (int id in Enumerable.Range(0, 20)) Check(GameContent.DecorationFlavor(id).Split(' ').Length <= 5, "shop explanation word limit");
+        Check(Run.Decorations.Length == 20, "twenty possible shop boosts");
 
         var frequencies = new Dictionary<Rarity, int>(); var kinds = new HashSet<CardKind>();
         foreach (int seed in Enumerable.Range(0, 3000))
@@ -45,9 +46,56 @@ public static class Verification
         Check(a.Phase == Phase.Booster && a.Boosters.Count == 3, "news precedes booster pack");
         Check(a.ClaimBooster(0) && !a.ClaimBooster(0), "only one booster claim");
         double cash = a.Cash;
-        Check(a.Buy(1) && !a.Buy(1) && a.Cash == cash - 450, "shop cost and duplicate guard");
+        int price = a.ShopOffers[1].Cost;
+        Check(a.Buy(1) && !a.Buy(1) && a.Cash == cash - price, "shop cost and duplicate guard");
+        Check(a.ShopOffers.Count == 6 && a.ShopOffers.Select(item => item.Id).Distinct().Count() == 6, "six distinct rotating shop offers");
+        int decisionRerolls = a.Rerolls;
+        int[] oldOffers = a.ShopOffers.Select(item => item.Id).ToArray(); cash = a.Cash;
+        Check(a.RerollShop() && a.Cash == cash - 75 && a.ShopRerollCost == 100, "paid shop reroll and increasing price");
+        Check(a.Rerolls == decisionRerolls && a.ShopOffers.All(item => !a.Owned.Contains(item.Id)), "shop refresh is separate from decision rerolls and excludes owned boosts");
+        Check(a.ShopOffers.Any(item => !oldOffers.Contains(item.Id)), "refresh changes at least one available boost");
         Check(a.NextMonth() && a.Month == 2, "month progression");
         Check(a.Rerolls == 1 + (a.ActiveBoosts.Any(x => x.Card.Id is 6 or 19) ? 1 : 0), "one base reroll plus actual booster");
+        Check(!a.RerollShop(), "shop reroll is guarded outside shop phase");
+        var seenShop = new HashSet<int>();
+        foreach (int seed in Enumerable.Range(0, 400))
+        {
+            Run offers = OpenShop(courses[0], seed);
+            foreach (Decoration offer in offers.ShopOffers) seenShop.Add(offer.Id);
+            Check(offers.ShopOffers.Count == 6 && offers.ShopOffers.Select(item => item.Id).Distinct().Count() == 6, "distinct offers from full pool");
+        }
+        Check(seenShop.Count == 20, "every one of twenty decorations can appear");
+        foreach (int id in Enumerable.Range(0, 20))
+        {
+            Run itemRun = Enumerable.Range(0, 2000).Select(seed => OpenShop(courses[0], seed)).First(r => r.ShopOffers.Any(item => item.Id == id));
+            int slot = itemRun.ShopOffers.FindIndex(item => item.Id == id);
+            double beforeCash = itemRun.Cash, beforeUnit = itemRun.UnitCost, beforeQuality = itemRun.Quality,
+                beforeDebt = itemRun.Debt, beforeShare = itemRun.Share, beforeRisk = itemRun.Risk;
+            int beforeCapacity = itemRun.Capacity, beforeStock = itemRun.Inventory;
+            Forecast priorForecast = itemRun.Preview();
+            Check(itemRun.Buy(slot) && itemRun.Owned.Contains(id) && itemRun.Cash == beforeCash - Run.Decorations[id].Cost,
+                "all twenty real shop purchases deduct their actual offer price");
+            Check(!itemRun.Buy(slot), "every upgrade is unique per run");
+            if (id is 1 or 9) Check(itemRun.UnitCost == beforeUnit - (id == 1 ? 0.5 : 0.3), "shop unit-cost effect");
+            if (id is 6 or 12) Check(itemRun.Capacity == beforeCapacity + (id == 6 ? 40 : 60), "shop capacity effect");
+            if (id is 5 or 10) Check(Math.Abs(itemRun.Preview().Profit - priorForecast.Profit - (id == 5 ? 60 : 40)) < 0.01, "shop overhead effect");
+            if (id == 8) Check(itemRun.Risk == Math.Max(0, beforeRisk - 6) && itemRun.Quality == Math.Min(100, beforeQuality + 4), "whiteboard effect");
+            if (id == 11) Check(itemRun.Quality == Math.Min(100, beforeQuality + 8) && itemRun.Preview().Demand > priorForecast.Demand, "aquarium effect");
+            if (id == 13) Check(itemRun.Share == beforeShare + 0.5, "cork board effect");
+            if (id == 17) Check(itemRun.Debt == Math.Max(0, beforeDebt - 400) && itemRun.Risk == Math.Max(0, beforeRisk - 4), "meeting table effect");
+            if (id is 0 or 18) Check(itemRun.Preview().Demand > priorForecast.Demand, "demand decoration effect");
+            if (id is 3 or 16) Check(itemRun.Preview().Revenue > priorForecast.Revenue, "per-unit margin effect");
+            itemRun.NextMonth();
+            if (id is 2 or 19) Check(itemRun.Actions == 4, "extra shop decision effect");
+            if (id == 4) Check(itemRun.Rerolls == 2, "shop extra reroll effect");
+            if (id is 7 or 15) Check(itemRun.Inventory == beforeStock + (id == 7 ? 20 : 30), "recurring free-stock effect");
+            if (id == 14) Check(itemRun.InvestmentIncome == 50, "coin jar income starts next month");
+        }
+        Run costlyRefresh = OpenShop(courses[0], 9);
+        while (costlyRefresh.Cash >= costlyRefresh.ShopRerollCost) Check(costlyRefresh.RerollShop(), "affordable reroll works");
+        double beforeRejected = costlyRefresh.Cash;
+        int[] unchanged = costlyRefresh.ShopOffers.Select(item => item.Id).ToArray();
+        Check(!costlyRefresh.RerollShop() && costlyRefresh.Cash == beforeRejected && unchanged.SequenceEqual(costlyRefresh.ShopOffers.Select(item => item.Id)), "unaffordable shop refresh changes neither stock nor cash");
 
         foreach (int eventId in Enumerable.Range(0, 12))
         {
@@ -78,9 +126,14 @@ public static class Verification
                 "instant gifts excluded; persistent boosts listed");
         }
 
-        string directory = Path.Combine(Path.GetTempPath(), "BusinessGameV3-tests-" + Guid.NewGuid().ToString("N"));
+        string directory = Path.Combine(Path.GetTempPath(), "TranslateUni-tests-" + Guid.NewGuid().ToString("N"));
         var store = new Storage(directory); var app = new GameApp(courses, store);
-        Key(app, ConsoleKey.T); Check(app.Screen == Screen.TutorialIntro, "tutorial shortcut");
+        Canvas main = app.Render(120, 42);
+        Check(main.Lines().Any(line => line.Contains("TranslateUni")), "new game branding");
+        Check(main.Lines().Any(line => line.Contains("3 DIFFICULTY")) && main.Lines().All(line => !line.Contains("DIFFICULTY CHIPS")), "main menu difficulty label");
+        Key(app, ConsoleKey.T); Check(app.Screen == Screen.Guide, "tutorial and reference merged");
+        Check(app.Render(120, 42).Buttons.Any(b => b.Action == "tutorialStart"), "merged guide starts practice");
+        Key(app, ConsoleKey.Enter); Check(app.Screen == Screen.TutorialIntro, "practice opens from merged guide");
         Check(app.Game!.Rerolls == 1, "tutorial starts with one reroll");
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1);
         Canvas selected = app.Render(108, 40);
@@ -97,8 +150,10 @@ public static class Verification
         Check(app.Screen == Screen.Shop && app.Game.ActiveBoosts.Any(x => x.Card.Family == BoosterFamily.Green)
             && app.Game.ActiveBoosts.Any(x => x.Card.Family == BoosterFamily.Purple), "tutorial demonstrates both booster colors");
         Canvas shop = app.Render(108, 40);
-        Check(shop.Lines()[14].Count(c => c == '=') == 66 && shop.Lines()[24].Count(c => c == '=') == 66, "two shop shelves");
+        Check(shop.Lines()[15].Count(c => c == '=') == 66 && shop.Lines()[26].Count(c => c == '=') == 66, "two shop shelves");
         Check(shop.Lines().Any(l => l.Contains("NEXT MONTH 2/12 QUOTAS")), "quotas visible in shop");
+        Key(app, ConsoleKey.S); Check(app.Screen == Screen.Shop, "S navigates shop rather than exiting");
+        Key(app, ConsoleKey.W); // Navigate back to the lamp row.
         HitBox lamp = shop.Buttons.Single(h => h.Action == "shopSelect" && h.Index == 1);
         app.Handle(new(X: lamp.X + 1, Y: lamp.Y + 1), shop); Key(app, ConsoleKey.Enter);
         Check(app.Game.Owned.Contains(1), "mouse shop selection and purchase");
@@ -108,15 +163,27 @@ public static class Verification
         Canvas another = app.Render(120, 42); HitBox purple = another.Buttons.Last(h => h.Action == "activeInspect");
         Check(another.ColorAt(purple.X, purple.Y) == ConsoleColor.Magenta, "purple booster rendered in purple");
         app.Handle(new(X: purple.X, Y: purple.Y), another);
-        Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.S); Key(app, ConsoleKey.N);
+        Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.N);
+        Check(app.Screen == Screen.Shop && app.Game.Month == 1, "N no longer leaves shop");
+        Key(app, ConsoleKey.Spacebar);
         Check(app.Screen == Screen.TutorialComplete && app.Game.Month == 2, "tutorial demonstrates next month");
         Canvas finished = app.Render(108, 40);
         Check(finished.Lines().Any(l => l.Contains("Last profit: $")) && finished.Lines().Any(l => l.Contains("Last sales: $")), "last month earnings next to quotas");
         Check(finished.Lines().Any(l => l.Contains("G Brand Spark")) && finished.Lines().Any(l => l.Contains("P Coupon Engine")), "both active booster names visible");
-        Key(app, ConsoleKey.Enter); Check(store.History.Count == 0 && store.Preferences.TutorialCompleted, "tutorial saved without adding fake run result");
+        Key(app, ConsoleKey.Enter); Check(store.History.Count == 0 && store.Preferences.TutorialCompleted && app.Screen == Screen.Guide, "practice returns to merged guide without fake result");
         Check(new Storage(directory).Preferences.TutorialCompleted, "tutorial completion persists");
 
-        Key(app, ConsoleKey.D1); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); Key(app, ConsoleKey.Enter);
+        Key(app, ConsoleKey.Escape);
+        Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.Enter);
+        Check(app.Screen == Screen.Courses, "W/S navigate main menu");
+        Key(app, ConsoleKey.D); Key(app, ConsoleKey.A); Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.Enter);
+        Check(app.Screen == Screen.Topics, "WASD navigates course grid");
+        Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.Enter);
+        Key(app, ConsoleKey.D); Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.A); Key(app, ConsoleKey.Enter);
+        Check(app.Game!.Difficulty == Difficulty.Easy, "WASD navigates difficulty selection");
+        Key(app, ConsoleKey.D); Key(app, ConsoleKey.D);
+        Check(app.Render(108, 40).Lines()[10][27] == '+', "D selects second card");
+        Key(app, ConsoleKey.A); Key(app, ConsoleKey.Spacebar);
         foreach (ConsoleKey key in new[] { ConsoleKey.R, ConsoleKey.Escape, ConsoleKey.Escape }) Key(app, key);
         Check(app.Game!.Rerolls == 0 && app.Screen == Screen.Table, "regular keyboard and pause flow");
         app.Game.ActiveBoosts.AddRange(Run.BoosterPool.Where(b => b.Persistent).Select(b => new ActiveBooster(b)));
@@ -128,6 +195,22 @@ public static class Verification
         Canvas lastPage = app.Render(108, 40);
         int lastIndex = lastPage.Buttons.Where(b => b.Action == "activeInspect").Max(b => b.Index);
         Check(lastIndex == app.Game.ActiveBoosts.Count - 1, "scroll reaches the final active booster");
+        Key(app, ConsoleKey.E); Key(app, ConsoleKey.E); Key(app, ConsoleKey.Enter);
+        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.E);
+        Check(app.Screen == Screen.Shop, "regular run reaches randomized shop");
+        double uiCash = app.Game.Cash;
+        Check(app.Render(108, 40).Buttons.Any(b => b.Action == "shopReroll"), "shop refresh button is present");
+        Key(app, ConsoleKey.R);
+        Check(app.Game.Cash == uiCash - 75 && app.Game.ShopRerolls == 1 && app.Game.Rerolls == 0, "R uses paid shop reroll rather than decision reroll");
+        Key(app, ConsoleKey.Spacebar);
+        Check(app.Screen == Screen.Table && app.Game.Month == 2, "Space leaves regular shop and begins next month");
+        Run soldOut = OpenShop(courses[0], 19);
+        soldOut.Owned.UnionWith(Run.Decorations.Select(item => item.Id));
+        double soldOutCash = soldOut.Cash;
+        Check(!soldOut.RerollShop() && soldOut.Cash == soldOutCash, "sold-out pool does not charge for a refresh");
+        soldOut.NextMonth(); soldOut.FinishDecisions(); soldOut.SkipEvents(); soldOut.ContinueResult();
+        soldOut.AcknowledgeCompanyEvent(); soldOut.SkipBooster();
+        Check(soldOut.ShopOffers.Count == 0 && !soldOut.Buy(0), "empty shop pool handles purchases safely");
 
         int won = 0, retries = 0;
         foreach (Course course in courses)
@@ -155,6 +238,12 @@ public static class Verification
     {
         var run = new Run(course, 0, Difficulty.Easy, seed);
         run.FinishDecisions(); run.SkipEvents(); run.ContinueResult();
+        return run;
+    }
+    static Run OpenShop(Course course, int seed)
+    {
+        Run run = ClearFirst(course, seed);
+        run.AcknowledgeCompanyEvent(); run.SkipBooster();
         return run;
     }
 
@@ -196,7 +285,11 @@ public static class Verification
             }
             else if (run.Phase == Phase.Shop)
             {
-                foreach (int item in new[] { 2, 1, 3, 5, 4, 0 }) if (run.Cash > Run.Decorations[item].Cost + 2200) run.Buy(item);
+                foreach (int item in new[] { 2, 19, 1, 3, 5, 4, 0, 7, 9, 10, 15, 16, 14, 6, 8, 11, 12, 13, 17, 18 })
+                {
+                    int slot = run.ShopOffers.FindIndex(offer => offer.Id == item);
+                    if (slot >= 0 && run.Cash > run.ShopOffers[slot].Cost + 2200) run.Buy(slot);
+                }
                 run.NextMonth();
             }
         }
@@ -205,18 +298,19 @@ public static class Verification
 
     public static void Preview(List<Course> courses)
     {
-        string directory = Path.Combine(Environment.CurrentDirectory, "previews-v3"); Directory.CreateDirectory(directory);
-        var app = new GameApp(courses, new Storage(Path.Combine(Path.GetTempPath(), "BusinessGameV3-preview-" + Guid.NewGuid().ToString("N"))));
+        string directory = Path.Combine(Environment.CurrentDirectory, "previews-translateuni"); Directory.CreateDirectory(directory);
+        var app = new GameApp(courses, new Storage(Path.Combine(Path.GetTempPath(), "TranslateUni-preview-" + Guid.NewGuid().ToString("N"))));
         void capture(string name)
         {
             File.WriteAllLines(Path.Combine(directory, name + ".txt"), app.Render(120, 42).Lines());
             File.WriteAllLines(Path.Combine(directory, name + "-108.txt"), app.Render(108, 40).Lines());
         }
-        capture("01-main"); Key(app, ConsoleKey.T); capture("02-tutorial-intro"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("03-cards-and-desk");
+        capture("01-main"); Key(app, ConsoleKey.T); capture("02-learning-guide"); Key(app, ConsoleKey.Enter); capture("02-tutorial-intro"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("03-cards-and-desk");
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.R); Key(app, ConsoleKey.E); capture("04-events"); Key(app, ConsoleKey.E); capture("05-report");
         Key(app, ConsoleKey.Enter); capture("06-company-news"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("07-boosters");
-        Key(app, ConsoleKey.Enter); capture("08-shop-and-side-menu"); Key(app, ConsoleKey.D2); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.S); Key(app, ConsoleKey.N); capture("09-tutorial-complete");
-        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("10-course-selection"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); capture("11-difficulty-chips");
+        Key(app, ConsoleKey.Enter); capture("08-shop-and-side-menu"); Key(app, ConsoleKey.D2); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Spacebar); capture("09-tutorial-complete");
+        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.D1); capture("10-course-selection"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); capture("11-difficulty-chips");
         Console.WriteLine("Saved UI previews to " + directory);
     }
 }
+

@@ -1,64 +1,73 @@
-# BusinessGame v3
+# TranslateUni
 
-## Start
+The next version of the business card game, with a merged learning guide, WASD controls and a rotating decoration shop.
 
-On Windows, double-click **StartGame.cmd**, or open **BusinessGameV3.sln** in Visual Studio. The `play` folder contains a ready-built executable; it uses the .NET 8 runtime installed on this computer.
+## Play
 
-Use a terminal at least **108 columns × 40 rows**. **120 × 42** is recommended. The wider layout keeps three readable cards, the original statistics desk, and the quota/booster panel visible together. The game attempts to resize Windows console windows where supported.
+Extract the complete package and double-click **StartGame.cmd**. The ready-built game is in `play/TranslateUni.exe` and uses the installed .NET 8 runtime.
 
-Press **T** on the main menu, or choose **Tutorial — 2 minutes**, for the guided practice run. It takes roughly two minutes at a normal reading pace; there is no countdown or forced delay.
+For source development, open **TranslateUni.sln** in Visual Studio, or run:
 
-## What's new
+```powershell
+dotnet run --project TranslateUni.csproj
+```
 
-- **32 decision cards**, up from 16, plus **20 booster choices** and a larger optional-event pool.
-- **Common, Uncommon, Rare, Epic and Legendary** rarities. Weighted draws make rarer cards less frequent. Cards in a single deal are distinct.
-- Every card has a funny explanation of **five words or fewer**, with the actual numeric definition underneath. Example: Black Friday Sale says **“Low price, more buy”**, followed by its price, demand and quality changes.
-- **I** opens a full explanation for a selected decision, optional event, booster, decoration or company event.
-- A persistent **right-side menu** shows the current/next month's quotas, **last month's profit and sales revenue**, and active **green and purple booster cards**. Click a booster to inspect it; **Page Up / Page Down** scrolls long lists. Repeated booster copies are grouped with a count. Instant cash/stock gifts are consumed and do not appear as ongoing effects.
-- Every difficulty starts with **one reroll each month**. Acquired reroll boosters and the Lucky Cat add to that base.
-- The old **sloping statistics desk** displays cash, debt, price, unit cost, inventory and share again, with R and S buttons beside it.
-- After every cleared quota, a **company-news event** appears before the booster reward. New competitors, internet scandals, good PR, new majorities, strikes, investors and other developments change the business. All consequences specify their timing. These are mandatory company developments; the earlier three-card event phase remains optional.
-- An interactive tutorial plays through one practice month and begins the next. It teaches card selection, effects, the reroll, optional events, quota results, mandatory company news, boosters, shop purchases and progression. The tutorial awards one extra booster to show both colors. Practice results do not enter run history.
+Recommended terminal: **120 columns × 42 rows**. Minimum: **108 × 40**. The game tries to resize compatible Windows console windows.
 
-## The monthly cycle
+## Learning Guide + Tutorial
 
-**Decisions → optional events → quota check → company news → booster → shop → next month.**
+The main menu has one combined **Learning Guide + Tutorial** entry. **T** and **G** both open this same guide. It contains the controls, monthly game cycle, quota rules, economy, boosters and shop instructions. Press **Enter** to start its guided practice, which takes about two minutes at normal reading pace.
 
-Choose a course, a topic, and a difficulty chip. Full runs require **12 consecutive monthly quota clears**. All displayed targets must be met. A missed quota ends the run. After the twelfth clear, the final company headline leads to victory; it cannot undo the already earned win.
-
-Green boosters provide regular permanent improvements. Purple boosters are Rare/Epic/Legendary improvements. Colors indicate their family; each card also prints its exact rarity. Read the numbers and costs before deciding: rarity does not guarantee the best choice for your current situation.
-
-Company-news changes marked **next month** last for that following month unless explicitly called permanent. Changes marked **now** apply once when you acknowledge the news. News never applies twice if you revisit screens. The PR Guardian booster softens internet scandals.
-
-The side panel shows next month's quota while viewing company news, choosing rewards, or shopping. In the decision and optional-event phases, it shows the current month's quota beside the previous month's actual earnings. New runs show `--` because there is no previous month yet. **Profit** is revenue minus operating expenses; **sales** is revenue before expenses. They are shown separately.
+Practice demonstrates one complete month and the transition into month two. When it finishes, **Enter returns to the Learning Guide**. Press **ESC** from the guide to return to the main menu. The practice does not add a fake run to your results.
 
 ## Controls
 
-| Screen | Controls |
+**WASD and arrows both navigate.** W/A move up/left; S/D move down/right. Course and shop grids move vertically by a row. Menus, topics, difficulty choices, cards and settings support these keys. Number shortcuts, Enter and mouse selection remain available.
+
+| Action | Keys |
 |---|---|
-| Menus | Arrows + Enter; numbers or mouse; T starts the tutorial; G opens the full guide |
-| Cards | Arrows / 1–3 / mouse select; Enter plays; Space deselects; I explains |
-| Decisions | R rerolls, even without a selection; E ends decisions early |
-| Optional events | Enter accepts one selected card; E leaves all three |
-| Quota result / company news | Enter continues or acknowledges |
-| Booster pack | Enter claims one; E skips in a regular run |
-| Shop | Arrows / 1–6 / mouse select; Enter buys; I explains; S/ESC leaves; N advances |
-| Active boosters | Page Up / Page Down or side arrows scroll; click opens details |
-| Active run | ESC pauses; Enter/ESC resumes; M abandons to main menu |
-| Finished run | R retries; Enter/ESC returns to menu |
+| Navigate / select | WASD, arrows, numbers, or mouse |
+| Play card / accept choice / buy | Enter |
+| Clear a selected card | Space, during card phases |
+| Inspect selected card or decoration | I |
+| End decisions / skip optional events | E |
+| Decision/event reroll | R; one base reroll per month |
+| Shop reroll | R; spends cash and refreshes six offers |
+| **Leave shop and start next month** | **Space** |
+| Return from shop to rewards | B or ESC |
+| Reopen shop from rewards | B |
+| Advance from rewards | Space or Enter |
+| Pause active run | ESC |
+| Scroll active-booster sidebar | Page Up / Page Down |
+| Learning Guide + Tutorial | T or G from the main menu |
 
-Compatible Windows consoles support mouse input; the keyboard controls cover every action.
+S is used for downward navigation. The shop shortcut is **B**, and **N no longer advances the month**.
 
-## Build, save and verify
+## Rotating shop: 20 possibilities
 
-The six EconForge courses and all 60 original topic names, theory and strategy data are retained. Settings and finished results are saved to `data` beside the executable. Active runs are not saved. The earlier game versions are separate projects.
+The two shelves show **six distinct offers** drawn from a pool of **20 decorations**. Offers rotate after each monthly quota and reward sequence. Reopening the shop between months keeps its current offers.
+
+Press **R** or click the shop reroll button to refresh the shelves. The first refresh costs **$75**; each additional refresh that month costs **$25 more**. This fee resets in the next monthly shop and is independent of decision-card rerolls. A refresh introduces at least one new offer. Unaffordable refreshes change neither cash nor stock, and a sold-out pool does not charge a refresh fee.
+
+Decorations can be purchased once per run. Owned decorations are excluded from future draws. If fewer than six remain, some shelves are empty. If all twenty are owned, the shop safely displays empty slots and you can still press Space to continue.
+
+The pool includes the original plant, lamp, clock, art, lucky cat and fountain, plus a coffee machine, calendar, whiteboard, bookcase, fan, aquarium, standing desk, cork board, coin jar, printer, gold pen, meeting table, neon sign and executive chair. Their effects help demand, unit cost, overhead, capacity, stock, income, debt, risk, quality, share, rerolls or decisions. Each offer shows its price, rarity, short explanation and actual effect; **I** opens the full definition.
+
+## The game
+
+Choose one of six courses, one of ten topics, and one of three difficulties. Meet all quotas for **12 months** to win. The run follows:
+
+**Decisions → optional events → quota results → company news → booster → shop → next month.**
+
+The original statistics desk, short card explanations, card rarities, persistent quota/earnings panel, green/purple booster sidebar, and company-news events are included. Settings and finished results are saved to `data` beside the executable. Active runs are not saved.
+
+## Verification
 
 ```powershell
-dotnet run --project BusinessGameV3.csproj
-dotnet run --project BusinessGameV3.csproj -- --self-test
-dotnet run --project BusinessGameV3.csproj -- --preview
+dotnet run --project TranslateUni.csproj -- --self-test
+dotnet run --project TranslateUni.csproj -- --preview
 ```
 
-Automated checks cover all card explanations and rarity distribution; one-reroll behavior; company-news timing and guards; booster persistence; the old desk; side-panel colors, scrolling and inspection; shop controls; the whole tutorial; saved settings/results; and all **180 course/topic/difficulty combinations**. Every combination has a verified 12-month victory path. UI text previews are generated at both supported minimum and recommended terminal sizes.
+Checks cover merged-guide navigation and practice, WASD controls, Space shop exit, all 20 decoration effects, rotating and paid shop refreshes, purchase guards, sold-out pools, card/booster behavior, rendering and saved results. All **180 course/topic/difficulty combinations** have a verified twelve-month victory path.
 
-The included source is a complete project. Keep `course-data.json` with the project when rebuilding; the project embeds it into the executable.
+Keep `course-data.json` with the source when rebuilding; it is embedded into the executable.

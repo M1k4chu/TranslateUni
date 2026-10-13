@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace BusinessGame;
+namespace TranslateUni;
 
 public static class Program
 {
@@ -16,6 +16,7 @@ public static class Program
             { Console.WriteLine("Run this game in an interactive terminal, or use --self-test."); return 1; }
             TryResize();
             using var input = new TerminalInput();
+            Console.Title = "TranslateUni";
             var app = new GameApp(courses, new Storage());
             Console.Clear();
             while (!app.Quit)
@@ -66,7 +67,7 @@ public sealed partial class GameApp
     bool browsing, recorded;
     string notice = "";
     Screen beforePause;
-    static readonly string[] Menu = ["Student / Team - PLAY", "Quick Demo - FreshFizz", "Course Library", "Previous Results", "Settings", "Tutorial - 2 minutes", "Product Analytics", "Exit"];
+    static readonly string[] Menu = ["Student / Team - PLAY", "Quick Demo - FreshFizz", "Course Library", "Previous Results", "Settings", "Learning Guide + Tutorial", "Product Analytics", "Exit"];
 
     public GameApp(List<Course> courses, Storage storage)
     { this.courses = courses; this.storage = storage; difficultyIndex = (int)storage.Preferences.Difficulty; }
@@ -136,8 +137,9 @@ public sealed partial class GameApp
         { if (key == ConsoleKey.Enter) Activate("tutorialBegin"); return; }
         if (Screen == Screen.TutorialComplete)
         { if (key == ConsoleKey.Enter) Activate("tutorialFinish"); return; }
-        if (Screen == Screen.Main && key == ConsoleKey.T) { StartTutorial(); return; }
-        if (Screen == Screen.Main && key == ConsoleKey.G) { Screen = Screen.Guide; return; }
+        if (Screen == Screen.Main && key is ConsoleKey.T or ConsoleKey.G) { Screen = Screen.Guide; return; }
+        if (Screen == Screen.Guide)
+        { if (key == ConsoleKey.Enter) StartTutorial(); return; }
         int digit = Digit(key);
         if (Screen == Screen.Main)
         {
@@ -175,7 +177,7 @@ public sealed partial class GameApp
             if (key == ConsoleKey.Enter) Activate("play");
             else if (key == ConsoleKey.R) Activate("reroll");
             else if (key == ConsoleKey.E) Activate("skip");
-            else if (key == ConsoleKey.S) notice = "The shop opens after clearing the month and choosing a booster.";
+            else if (key == ConsoleKey.B) notice = "The shop opens after clearing the month and choosing a booster.";
             return;
         }
         if (Screen == Screen.Shop)
@@ -183,14 +185,15 @@ public sealed partial class GameApp
             shopIndex = GridNavigate(key, shopIndex, 6, 3);
             if (digit >= 0 && digit < 6) shopIndex = digit;
             if (key == ConsoleKey.Enter) Activate("buy", shopIndex);
-            else if (key == ConsoleKey.S) Activate("shopBack");
-            else if (key == ConsoleKey.N) Activate("next");
+            else if (key == ConsoleKey.B) Activate("shopBack");
+            else if (key == ConsoleKey.Spacebar) Activate("next");
+            else if (key == ConsoleKey.R) Activate("shopReroll");
             return;
         }
         if (Screen == Screen.Reward)
         {
-            if (key == ConsoleKey.S) Activate("shop");
-            else if (key is ConsoleKey.N or ConsoleKey.Enter) Activate("next");
+            if (key == ConsoleKey.B) Activate("shop");
+            else if (key is ConsoleKey.Spacebar or ConsoleKey.Enter) Activate("next");
             return;
         }
         if (Screen == Screen.Result && key == ConsoleKey.Enter) Activate("continue");
@@ -201,6 +204,8 @@ public sealed partial class GameApp
         { if (key is ConsoleKey.Enter or ConsoleKey.R) Screen = beforePause; else if (key == ConsoleKey.M) ReturnMain(); }
         else if (Screen == Screen.Settings)
         {
+            difficultyIndex = Navigate(key, (int)storage.Preferences.Difficulty, 3);
+            storage.Preferences.Difficulty = (Difficulty)difficultyIndex;
             if (digit is >= 0 and < 3) { storage.Preferences.Difficulty = (Difficulty)digit; difficultyIndex = digit; }
             storage.SaveSettings();
         }
@@ -222,7 +227,7 @@ public sealed partial class GameApp
                     case 2: browsing = true; Screen = Screen.Courses; break;
                     case 3: Screen = Screen.History; break;
                     case 4: Screen = Screen.Settings; break;
-                    case 5: StartTutorial(); break;
+                    case 5: Screen = Screen.Guide; break;
                     case 6: Screen = Screen.Analytics; break;
                     case 7: Quit = true; break;
                 }
@@ -255,6 +260,7 @@ public sealed partial class GameApp
             case "companyContinue": Game?.AcknowledgeCompanyEvent(); SyncScreen(); break;
             case "buy": Game?.Buy(index); break;
             case "shopSelect": shopIndex = index; break;
+            case "shopReroll": if (Game?.RerollShop() == true) shopIndex = 0; break;
             case "lockedShop": notice = "The shop opens after clearing the month and choosing a booster."; break;
             case "shopBack": Screen = Screen.Reward; break;
             case "shop": if (Game?.Phase == Phase.Shop) Screen = Screen.Shop; break;
@@ -271,7 +277,8 @@ public sealed partial class GameApp
             case "inspect": InspectSelected(); break;
             case "inspectBack": Screen = beforeInspect; break;
             case "tutorialBegin": tutorialStep = 1; Screen = Screen.Table; break;
-            case "tutorialFinish": storage.Preferences.TutorialCompleted = true; storage.SaveSettings(); ReturnMain(); break;
+            case "tutorialStart": StartTutorial(); break;
+            case "tutorialFinish": storage.Preferences.TutorialCompleted = true; storage.SaveSettings(); ReturnMain(); Screen = Screen.Guide; break;
         }
         ObserveTutorial(action, phaseBefore);
     }
@@ -315,12 +322,12 @@ public sealed partial class GameApp
         : key is ConsoleKey.D0 or ConsoleKey.NumPad0 ? 9 : -1;
     static int Navigate(ConsoleKey key, int value, int count) => key switch
     {
-        ConsoleKey.LeftArrow or ConsoleKey.UpArrow => Math.Max(0, value - 1),
-        ConsoleKey.RightArrow or ConsoleKey.DownArrow => Math.Min(count - 1, value + 1), _ => value
+        ConsoleKey.LeftArrow or ConsoleKey.UpArrow or ConsoleKey.A or ConsoleKey.W => Math.Max(0, value - 1),
+        ConsoleKey.RightArrow or ConsoleKey.DownArrow or ConsoleKey.D or ConsoleKey.S => Math.Min(count - 1, value + 1), _ => value
     };
     static int GridNavigate(ConsoleKey key, int value, int count, int columns) => key switch
     {
-        ConsoleKey.UpArrow => Math.Max(0, value - columns), ConsoleKey.DownArrow => Math.Min(count - 1, value + columns),
+        ConsoleKey.UpArrow or ConsoleKey.W => Math.Max(0, value - columns), ConsoleKey.DownArrow or ConsoleKey.S => Math.Min(count - 1, value + columns),
         _ => Navigate(key, value, count)
     };
     static void Header(Canvas c, string title, string subtitle = "")
@@ -332,9 +339,9 @@ public sealed partial class GameApp
     void DrawMain(Canvas c)
     {
         c.Center(1, ".------------------------------------------------------.", ConsoleColor.DarkCyan);
-        c.Center(2, "|              B U S I N E S S G A M E                 |", ConsoleColor.Cyan);
+        c.Center(2, "|                 T r a n s l a t e U n i              |", ConsoleColor.Cyan);
         c.Center(3, "'------------------------------------------------------'", ConsoleColor.DarkCyan);
-        c.Center(5, "THE ECONFORGE EDITION - V3", ConsoleColor.Yellow);
+        c.Center(5, "TranslateUni - the business learning game", ConsoleColor.Yellow);
         c.Center(6, "One company. Twelve months. Every decision counts.");
         for (int i = 0; i < Menu.Length; i++) c.Button(6, 9 + i * 2, (i + 1) + ". " + Menu[i], "menu", i, i == menuIndex);
         int x = c.Width - 29;
@@ -343,9 +350,9 @@ public sealed partial class GameApp
         c.Text(x + 4, 13, "  (o.o)", ConsoleColor.Yellow);
         c.Text(x + 3, 16, "12 MONTH QUOTAS", ConsoleColor.White);
         c.Text(x + 3, 18, "60 TOPIC DECKS", ConsoleColor.Cyan);
-        c.Text(x + 3, 19, "3 DIFFICULTY CHIPS", ConsoleColor.Red);
-        c.Center(27, "New here? T: hands-on 2-minute tutorial | G: full controls", ConsoleColor.Green);
-        Footer(c, "Arrows: Navigate | ENTER: Choose | 1-8 / mouse: Open | T: Tutorial | ESC: Exit");
+        c.Text(x + 3, 19, "3 DIFFICULTY", ConsoleColor.Red);
+        c.Center(27, "T / G: Learning Guide + two-minute guided practice", ConsoleColor.Green);
+        Footer(c, "WASD / arrows: Navigate | ENTER: Choose | 1-8 / mouse: Open | ESC: Exit");
     }
     void DrawCourses(Canvas c)
     {
@@ -362,7 +369,7 @@ public sealed partial class GameApp
             c.Buttons.Add(new(x, y, cardWidth, 8, "course", i));
         }
         c.Center(25, "Later topics add harder quotas and more responsibilities.");
-        Footer(c, "Arrows / 1-6: Highlight | ENTER / mouse: Open course | ESC: Back");
+        Footer(c, "WASD / arrows / 1-6: Highlight | ENTER / mouse: Open course | ESC: Back");
     }
     void DrawTopics(Canvas c)
     {
@@ -374,7 +381,7 @@ public sealed partial class GameApp
             c.Button(4, 5 + i * 2, $"{(i + 1),2}. {course.Lessons[i].Name}", "topic", i, i == topicIndex);
             c.Text(c.Width - 17, 5 + i * 2, tier, i >= 6 ? ConsoleColor.Red : ConsoleColor.DarkCyan);
         }
-        Footer(c, "Arrows / 1-9, 0=10: Highlight | ENTER / mouse: Select | ESC: Courses");
+        Footer(c, "WASD / arrows / 1-9, 0=10: Highlight | ENTER: Select | ESC: Courses");
     }
     void DrawDifficulty(Canvas c)
     {
@@ -396,7 +403,7 @@ public sealed partial class GameApp
             c.Buttons.Add(new(x, y, 22, 10, "difficulty", i));
         }
         c.Button((c.Width - 19) / 2, 23, "START 12-MONTH RUN", "start", selected: true);
-        Footer(c, "Arrows / 1-3 / mouse: Choose chip | ENTER: Start | ESC: Topics");
+        Footer(c, "WASD / arrows / 1-3: Choose difficulty | ENTER: Start | ESC: Topics");
     }
     void DrawTable(Canvas c, bool events)
     {
@@ -415,11 +422,11 @@ public sealed partial class GameApp
         }
         DrawStats(c);
         c.Button(3, 30, $"R {g.Rerolls}", "reroll");
-        c.Button(c.Width - 10, 30, "S", "lockedShop");
+        c.Button(c.Width - 10, 30, "B", "lockedShop");
         c.Button(3, 35, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
         c.Button(28, 35, events ? "ENTER TAKE" : "ENTER PLAY", "play");
         c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
-        Footer(c, "1-3: Select | ENTER: Play | E: Skip | I: Details | ESC: Pause");
+        Footer(c, "WASD/1-3: Select | ENTER: Play | E: Skip | I: Details | ESC: Pause");
     }
     void DrawCard(Canvas c, int index, string title, string flavor, string[] lines, Rarity rarity, bool raised, ConsoleColor color)
     {
@@ -486,7 +493,7 @@ public sealed partial class GameApp
         c.Text(3, 7, "GREEN: regular boosts | PURPLE: stronger rarities", ConsoleColor.Cyan);
         c.Button(5, 29, "ENTER CLAIM + SHOP", "play");
         c.Button(c.Width - 25, 29, "E SKIP + SHOP", "skip");
-        Footer(c, "Arrows / 1-3 / mouse: Select | ENTER: Claim | E: Skip booster | ESC: Pause");
+        Footer(c, "WASD/1-3: Select | ENTER: Claim | E: Skip | I: Details | ESC: Pause");
     }
     void DrawShop(Canvas c)
     {
@@ -495,25 +502,33 @@ public sealed partial class GameApp
         int left = (c.Width - 72) / 2;
         for (int i = 0; i < 6; i++)
         {
-            Decoration item = Run.Decorations[i]; int x = left + i % 3 * 24, y = 5 + i / 3 * 10;
-            ConsoleColor color = g.Owned.Contains(i) ? ConsoleColor.DarkGray : i == shopIndex ? ConsoleColor.Yellow : ConsoleColor.White;
+            int x = left + i % 3 * 24, y = 5 + i / 3 * 11;
+            if (i >= g.ShopOffers.Count)
+            {
+                c.Text(x, y + 3, "No unowned stock", ConsoleColor.DarkGray);
+                c.Text(x, y + 10, "======================", ConsoleColor.DarkYellow);
+                continue;
+            }
+            Decoration item = g.ShopOffers[i];
+            ConsoleColor color = g.Owned.Contains(item.Id) ? ConsoleColor.DarkGray : i == shopIndex ? ConsoleColor.Yellow : ConsoleColor.White;
             for (int row = 0; row < 3; row++) c.Text(x + 8, y + row, item.Art[row], color);
             c.Text(x, y + 3, $"{i + 1}. {item.Name}", color);
-            c.Text(x, y + 4, g.Owned.Contains(i) ? "OWNED" : "$" + item.Cost, color);
-            c.Wrapped(x, y + 5, GameContent.DecorationFlavor(i), 22, 3, ConsoleColor.Yellow);
-            c.Text(x, y + 8, item.Boost, color);
-            c.Text(x, y + 9, "======================", ConsoleColor.DarkYellow);
-            c.Buttons.Add(new(x, y, 22, 9, "shopSelect", i));
+            c.Text(x, y + 4, g.Owned.Contains(item.Id) ? "OWNED" : "$" + item.Cost + " " + item.Rarity, color);
+            c.Wrapped(x, y + 5, GameContent.DecorationFlavor(item.Id), 22, 3, ConsoleColor.Yellow);
+            c.Wrapped(x, y + 8, item.Boost, 22, 2, color);
+            c.Text(x, y + 10, "======================", ConsoleColor.DarkYellow);
+            c.Buttons.Add(new(x, y, 22, 10, "shopSelect", i));
         }
-        c.Text(left + 2, 26, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
-        c.Text(left + 2, 27, "  |o  o|    Choose a decoration, then ENTER to buy.");
-        c.Text(left + 2, 28, " /| -- |\\   New month, same helpful office!");
-        c.Rule(29, ConsoleColor.DarkYellow);
-        c.Button(left, 31, "ENTER BUY", "buy", shopIndex);
-        c.Button(left + 19, 31, "S BACK", "shopBack");
-        c.Button(left + 34, 31, "N NEXT MONTH", "next");
+        c.Text(left + 2, 28, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
+        c.Text(left + 2, 29, "  |o  o|    Choose a decoration, then ENTER to buy.");
+        c.Text(left + 2, 30, " /| -- |\\   New month, same helpful office!");
+        c.Rule(31, ConsoleColor.DarkYellow);
+        c.Button(left, 32, "ENTER BUY", "buy", shopIndex);
+        c.Button(left + 19, 32, "B BACK", "shopBack");
+        c.Button(left + 34, 32, "SPACE LEAVE SHOP", "next");
+        if (!g.Tutorial) c.Button(left, 34, $"R REROLL SHOP ${g.ShopRerollCost}", "shopReroll");
         c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
-        Footer(c, "Arrows/1-6: Select | ENTER: Buy | S/ESC: Leave shop | N: Next month");
+        Footer(c, "WASD/1-6: Select | ENTER: Buy | R: Reroll | SPACE: Next month");
     }
     void DrawReward(Canvas c)
     {
@@ -522,9 +537,9 @@ public sealed partial class GameApp
         c.Center(8, g.Message, ConsoleColor.Yellow);
         c.Center(11, "Your booster choice has been settled for this month.");
         c.Center(13, "Visit the shop again, or begin the next month.");
-        c.Button((c.Width - 22) / 2, 18, "S DECORATION SHOP", "shop");
-        c.Button((c.Width - 22) / 2, 21, "N NEXT MONTH", "next", selected: true);
-        Footer(c, "S: Shop | N / ENTER: Next month | ESC: Pause");
+        c.Button((c.Width - 22) / 2, 18, "B DECORATION SHOP", "shop");
+        c.Button((c.Width - 22) / 2, 21, "SPACE NEXT MONTH", "next", selected: true);
+        Footer(c, "B: Shop | SPACE / ENTER: Next month | ESC: Pause");
     }
     void DrawEnd(Canvas c)
     {
@@ -566,31 +581,33 @@ public sealed partial class GameApp
         for (int i = 0; i < 3; i++) c.Button(8, 8 + i * 3, $"{i + 1}. {(Difficulty)i}", "settingDifficulty", i, (int)storage.Preferences.Difficulty == i);
         c.Text(8, 19, "Keyboard and Windows console mouse input are both supported.");
         c.Text(8, 21, "Settings are saved beside the game in data/settings.json.");
-        Footer(c, "1-3 / mouse: Default difficulty | ESC: Main menu");
+        Footer(c, "WASD / arrows / 1-3: Default difficulty | ESC: Main menu");
     }
     void DrawGuide(Canvas c)
     {
-        Header(c, "LECTURER / LEARNING GUIDE", "A card game about business trade-offs");
+        Header(c, "TRANSLATEUNI - LEARNING GUIDE + TUTORIAL", "Read the reference, then try a guided practice month");
         string[] lines =
         [
             "1. Select one of six courses, then one of its ten topic levels.",
             "2. Choose an Easy, Normal, or Hard chip. Every run lasts 12 months.",
             "3. Each month, use decisions to change price, ads, stock, costs and risk.",
-            "4. Select a card with arrows, 1-3, or a mouse click. ENTER plays it.",
+            "4. WASD / arrows / 1-3 select cards. ENTER plays; I explains.",
             "5. Start with one reroll per month. R replaces cards; E ends decisions.",
             "6. In the event phase, take ONE card, or E to leave all three.",
             "7. Monthly sales settle automatically. Meet EVERY displayed quota.",
             "8. After a clear, company news changes your next month; read its effects.",
             "9. Choose one FREE booster. Green and purple effects appear on the right.",
-            "10. Shop for decorations. S leaves; N starts the next month.",
-            "11. Meet twelve monthly quotas to win. One missed month ends the run.",
+            "10. Six shop offers rotate from twenty upgrades. R refreshes for cash.",
+            "11. SPACE leaves the shop and starts the next month. B revisits rewards.",
+            "12. Meet twelve monthly quotas to win. One missed month ends the run.",
             "Common, Uncommon, Rare, Epic, Legendary: less common, more unusual.",
             "I explains a selected card. Click side boosters; PgUp/PgDn scrolls them.",
             "Profit includes sold-stock costs, ads, overhead, interest and events.",
             "Stock purchases use cash now; unsold stock remains for later months."
         ];
         for (int i = 0; i < lines.Length; i++) c.Text(4, 5 + i * 2, lines[i]);
-        Footer(c, "Later topics add service, cash-buffer and quality quotas. ESC: Main menu");
+        c.Button(4, c.Height - 4, "ENTER: GUIDED PRACTICE (~2 MIN)", "tutorialStart", selected: true);
+        Footer(c, "ENTER: Practice with this guide | ESC: Main menu");
     }
     void DrawAnalytics(Canvas c)
     {
@@ -627,3 +644,4 @@ public sealed partial class GameApp
         if (line.Length > 0) yield return line;
     }
 }
+

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace BusinessGame;
+namespace TranslateUni;
 
 public sealed record Input(ConsoleKey Key = ConsoleKey.NoName, int X = -1, int Y = -1);
 public sealed record HitBox(int X, int Y, int Width, int Height, string Action, int Index = -1);
@@ -141,3 +141,4 @@ public sealed class TerminalInput : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     static extern bool ReadConsoleInputW(IntPtr handle, out InputRecord record, uint length, out uint count);
 }
+
