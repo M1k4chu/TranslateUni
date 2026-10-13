@@ -7,7 +7,7 @@ public static class GameContent
         new(CardKind.Advertise, "Advertise Product"), new(CardKind.RaisePrice, "Premium Pricing"),
         new(CardKind.LowerPrice, "Price Cut"), new(CardKind.Restock, "Restock Inventory"),
         new(CardKind.Efficiency, "Lean Production", Rarity.Uncommon), new(CardKind.Factory, "New Factory", Rarity.Rare),
-        new(CardKind.Repay, "Repay Debt"), new(CardKind.Borrow, "Bridge Loan"),
+        new(CardKind.Repay, "Repay Debt"), new(CardKind.Borrow, "Loan Desk"),
         new(CardKind.SellShares, "Sell Company Shares"), new(CardKind.CustomerCare, "Customer Care"),
         new(CardKind.Sale, "Black Friday Sale"), new(CardKind.CourseFocus, "Course Playbook"),
         new(CardKind.Research, "Market Research", Rarity.Uncommon), new(CardKind.Insurance, "Risk Insurance", Rarity.Uncommon),

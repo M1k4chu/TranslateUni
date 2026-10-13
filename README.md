@@ -1,3 +1,20 @@
+# TranslateUni v5.4
+
+Run StartGame.cmd. Press L during a run to open the loan desk; choose with WASD/1-3 and ENTER. P pays as much of the balance as available cash allows. Click any statistics bar for its explanation and scale.
+
+Unchosen cards disappear in 398ms, then the selected card moves to the middle and performs its suction/star animation in exactly 1000ms of scheduled playback. Its dot is now two rows above the centered card, one row lower than before. The 1.5-second hold has been removed. Rendering time counts toward playback deadlines.
+
+Loans offer roughly 1x / 2x / 3x emergency funding with roughly 50% / 100% / 150% fixed interest fees; both amounts and rates vary by 5-10%. The amount scales to the current money shortfall. The card shows cash received, fee and total repayment before borrowing. New runs start without a loan. A remaining balance blocks all further loans; fully clearing the balance starts a three-month cooldown. Repayment cards, refinancing and debt-reducing upgrades also count when they clear the balance. Equity events and crowdfunding no longer create loans outside these rules.
+
+A result-screen loan can bridge a missed profit/cash/solvency quota. Bridge funding is spent to cover the profit shortfall and recorded separately from real earnings. Quality, service, risk, share and debt quotas still apply. An unaffordable or quota-breaking bridge is rejected. Borrowing does not increase sales profit. The interest fee is included once in the debt balance; imported interest-shock events can still charge a monthly expense.
+
+All ten statistics now have separate colored vertical bars. Changes compare with the month start and appear two rows above the bars, with one empty row in between. Bars end at row 34, five rows below the claim/shop controls at row 29. Values and names sit below the bars; clicking a bar explains its range. The panel stays visible throughout the run.
+
+Shop items use cyan, selections use white with an explicit SELECTED marker, and completed tiers use bright green. Shelves are cyan. The fullscreen compatibility improvements and all previous game content remain included.
+
+Validation: Release build without warnings; 6254 passing checks, including 180 complete campaigns, three loan tiers, variable fees, partial/full repayment, cooldown timing, bridge funding, debt quota enforcement, all three selected-card positions, lowered suction point, one-second timing, bar spacing and visible controls. Rendered color previews inspected at the minimum 108x40 layout.
+
+---
 # TranslateUni v5
 
 ## Start

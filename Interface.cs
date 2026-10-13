@@ -25,6 +25,7 @@ public sealed partial class GameApp
         int yQuota = 5;
         foreach (Quota quota in g.Quotas(month).Skip(1))
             c.Text(2, yQuota++, $"{quota.Name} {(quota.AtLeast ? ">=" : "<=")} {Metric(quota.Name, quota.Target)}", ConsoleColor.Cyan);
+        c.Text(2, 8, g.LoanStatus.Length > 26 ? g.LoanStatus[..26] : g.LoanStatus, g.HasActiveLoan ? ConsoleColor.Red : ConsoleColor.Green);
         c.Text(2, 9, $"Decor: {g.Owned.Count}/20 | Tiers 1-{g.MaxShopTier}");
         c.Text(2, 10, "ACTIVE BOOSTER CARDS", ConsoleColor.White);
         c.Text(2, 11, "GREEN regular / PURPLE rare", ConsoleColor.DarkGray);
@@ -45,6 +46,12 @@ public sealed partial class GameApp
             c.Text(2, y, name.Length > 26 ? name[..26] : name, color);
             c.Wrapped(2, y + 1, (entry.Stacks > 1 ? "Per copy: " : "") + b.Description, 26, 2);
             c.Buttons.Add(new(2, y, 26, 3, "activeInspect", boosterScroll + row));
+        }
+        if (g.Tutorial && tutorialStep is >= 1 and <= 9 && Screen is Screen.Table or Screen.Events or Screen.Booster)
+        {
+            c.Text(2, 24, $"PRACTICE {tutorialStep}/9", ConsoleColor.Green);
+            c.Wrapped(2, 25, TutorialInstruction, 26, 3, ConsoleColor.White);
+            c.Wrapped(2, 29, TutorialMeaning, 26, 5, ConsoleColor.Cyan);
         }
         c.Text(2, height - 3, $"Showing {Math.Min(boosterScroll + 1, active.Count)}-{Math.Min(boosterScroll + visible, active.Count)} / {active.Count}", ConsoleColor.DarkGray);
         c.Button(2, height - 2, "UP", "scrollUp"); c.Button(11, height - 2, "DOWN", "scrollDown");
@@ -108,7 +115,7 @@ public sealed partial class GameApp
         c.Wrapped(5, 9, inspectFlavor, c.Width - 10, 2, ConsoleColor.Yellow);
         c.Text(5, 13, "WHAT IT DOES", ConsoleColor.Cyan);
         c.Wrapped(5, 15, inspectDefinition, c.Width - 10, 12, ConsoleColor.White);
-        c.Button((c.Width - 17) / 2, 30, "ENTER BACK", "inspectBack", selected: true);
+        c.Button((c.Width - 17) / 2, 29, "ENTER BACK", "inspectBack", selected: true);
         Footer(c, "ENTER / ESC: Back | Your cards and choices are preserved");
     }
 
@@ -135,7 +142,7 @@ public sealed partial class GameApp
     bool TutorialAllows(string action, int index)
     {
         if (Game?.Tutorial != true || Screen is Screen.Pause or Screen.Inspect) return true;
-        if (action is "activeInspect" or "scrollUp" or "scrollDown" or "inspect" or "inspectBack") return true;
+        if (action is "activeInspect" or "statInspect" or "scrollUp" or "scrollDown" or "inspect" or "inspectBack") return true;
         return tutorialStep switch
         {
             0 => action == "tutorialBegin", 1 => action == "select" || action == "play" && selected == 0,
@@ -164,16 +171,21 @@ public sealed partial class GameApp
     {
         Header(c, "TRANSLATEUNI - GUIDED PRACTICE", "Your learning guide in action; about two minutes");
         c.Wrapped(5, 6, "Pick a course, choose a topic, then select a difficulty chip. Full runs last twelve months. This practice uses Marketing on Easy.", c.Width - 10, 4);
-        c.Wrapped(5, 12, "Your goal: meet every quota on the right. Profit is sales money minus costs. The desk shows cash, debt, price, stock, cost and share.", c.Width - 10, 4);
+        c.Wrapped(5, 12, "Your goal: meet every quota on the right. Profit is sales money minus costs. The bars show money, stock and company health. Changes compare with the month start.", c.Width - 10, 4);
         c.Wrapped(5, 18, "Select a card with WASD, 1-3 or arrows. It lifts up two rows. The joke explains the idea; the numbers underneath explain the actual effect.", c.Width - 10, 4);
         c.Wrapped(5, 24, "We will play a decision, reroll, skip an event, clear a quota, read company news, claim boosters, buy an upgrade and begin the next month.", c.Width - 10, 4);
-        c.Button((c.Width - 23) / 2, 32, "ENTER START PRACTICE", "tutorialBegin", selected: true);
+        c.Button((c.Width - 23) / 2, 29, "ENTER START PRACTICE", "tutorialBegin", selected: true);
         Footer(c, "ENTER: Start | ESC: Main menu | About two minutes, at your pace");
     }
     void DrawTutorialHint(Canvas c)
     {
         if (Game?.Tutorial != true || tutorialStep is < 1 or > 9 || Screen is Screen.Inspect or Screen.Pause) return;
-        string meaning = tutorialStep switch
+        if (Screen is Screen.Table or Screen.Events or Screen.Booster) return;
+        int y = Screen is Screen.Table or Screen.Events ? 7 : Screen == Screen.Booster ? 6 : Screen == Screen.Shop ? 3 : 27;
+        c.Wrapped(3, y, $"PRACTICE {tutorialStep}/9: {TutorialInstruction}", c.Width - 6, 1, ConsoleColor.Green);
+        c.Wrapped(3, y + 1, TutorialMeaning, c.Width - 6, 2, ConsoleColor.Yellow);
+    }
+    string TutorialMeaning => tutorialStep switch
         {
             1 => "Ads attract buyers. Check projected profit before spending.",
             2 => "Rerolls replace choices, not your stats. You begin with one.",
@@ -185,10 +197,6 @@ public sealed partial class GameApp
             8 => "Decorations start small. ENTER can buy the next upgrade tier.",
             _ => "SPACE leaves and starts next month. Stats and boosts carry over."
         };
-        int y = Screen is Screen.Table or Screen.Events ? 7 : Screen == Screen.Booster ? 6 : Screen == Screen.Shop ? 3 : 27;
-        c.Wrapped(3, y, $"PRACTICE {tutorialStep}/9: {TutorialInstruction}", c.Width - 6, 1, ConsoleColor.Green);
-        c.Wrapped(3, y + 1, meaning, c.Width - 6, 2, ConsoleColor.Yellow);
-    }
     void DrawTutorialComplete(Canvas c)
     {
         Header(c, "TUTORIAL COMPLETE", "You ran a month and prepared the next one.");
@@ -197,7 +205,7 @@ public sealed partial class GameApp
         c.Wrapped(5, 14, "Clear twelve quotas to win, then choose Endless if you want more. Shop items have three normal tiers and two extra endless tiers. Targets grow 35% each endless month.", c.Width - 10, 4);
         c.Wrapped(5, 20, "Common cards show up often. Uncommon, Rare, Epic and Legendary cards appear less often. Rarer is exciting, but read the cost before playing.", c.Width - 10, 4);
         c.Wrapped(5, 24, "I opens the full card explanation. Click a side-panel booster to inspect it. Page Up/Down scrolls long booster lists. ESC pauses; Space clears a selection.", c.Width - 10, 4);
-        c.Button((c.Width - 22) / 2, 35, "ENTER LEARNING GUIDE", "tutorialFinish", selected: true);
+        c.Button((c.Width - 22) / 2, 29, "ENTER LEARNING GUIDE", "tutorialFinish", selected: true);
         Footer(c, "ENTER: Learning Guide | ESC: Main menu | Ready for a twelve-month run");
     }
 }

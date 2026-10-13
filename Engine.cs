@@ -21,10 +21,10 @@ public sealed record CompanyEvent(string Name, string Flavor, string Description
 public sealed record Decoration(string Name, int Cost, string Boost, string[] Art, int Id, Rarity Rarity = Rarity.Common, int Tier = 1);
 public sealed record Quota(string Name, double Target, bool AtLeast = true);
 public sealed record MonthReport(int Month, double Revenue, double Profit, int Sold, double Service,
-    double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures);
+    double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures, double BridgeFunding = 0);
 public sealed record Forecast(int Demand, int Sold, double Revenue, double Profit, double Service);
 
-public sealed class Run
+public sealed partial class Run
 {
     public Course Course { get; }
     public Lesson Lesson { get; }
@@ -36,7 +36,16 @@ public sealed class Run
     public int Actions { get; private set; }
     public int Rerolls { get; private set; }
     public double Cash { get; private set; } = 5000;
-    public double Debt { get; private set; } = 1200;
+    double debt;
+    public double Debt
+    {
+        get => debt;
+        private set
+        {
+            double previous = debt; debt = Math.Max(0, value);
+            if (previous > 0 && debt <= 0) NextLoanMonth = Month + 3;
+        }
+    }
     public double Price { get; private set; } = 25;
     public double UnitCost { get; private set; } = 12;
     public int Inventory { get; private set; } = 450;
@@ -105,7 +114,7 @@ public sealed class Run
         new("Good PR", "The internet likes you today", "Next month: demand +10%. Share +0.5% now.", 2),
         new("New Company Majority", "New boss, extra bossiness", "Cash +$350 now; share -0.5% and risk +3. No new debt.", 3, Rarity.Uncommon),
         new("Supplier Strike", "Boxes took the day off", "Next month: capacity -10%. Existing inventory is safe.", 4),
-        new("Venture Investor", "Money arrived wearing a suit", "Cash +$500 now; debt +$200. More cash, more responsibility.", 5, Rarity.Uncommon),
+        new("Venture Investor", "Money arrived wearing a suit", "Cash +$500 now; share -0.3%. Equity investment, no new loan.", 5, Rarity.Uncommon),
         new("Viral Meme", "Your logo became a meme", "Next month: demand +15%. Quality +2 now.", 6, Rarity.Rare),
         new("Tax Relief", "The taxman found compassion", "Next month's overhead is $80 lower.", 7, Rarity.Uncommon),
         new("Local Business Award", "Mom finally understands your job", "Quality +4 and share +0.3% now.", 8),
@@ -165,7 +174,7 @@ public sealed class Run
         double revenue = sold * (effectivePrice + marginBonus);
         double carbon = Lesson.Name == "Externalities" ? 3 : 0;
         double overhead = Math.Max(60, 300 + TopicIndex * 15 - fixedDiscount - monthOverheadDiscount);
-        double interest = Debt * (0.02 + (int)Difficulty * 0.005 + extraInterest);
+        double interest = Debt * extraInterest; // Loan interest is a one-time fee already included in Debt.
         double carryCost = Math.Max(0, Inventory - sold) * (Course.Name == "Logistics" ? 0.35 : 0.08);
         double profit = revenue - sold * (UnitCost * costShock + carbon) - overhead - spending - interest - carryCost + InvestmentIncome;
         return new(wanted, sold, Math.Round(revenue, 2), Math.Round(profit, 2), 100.0 * sold / wanted);
@@ -198,8 +207,8 @@ public sealed class Run
         CardKind.Restock => [$"Stock +{RestockUnits}", $"Pay ${CardCost(kind):N0}", "Stock carries over"],
         CardKind.Efficiency => ["Spend $250", "Unit cost -$0.60", "Permanent boost"],
         CardKind.Factory => ["Spend $800", "Capacity +150", "Free stock +100"],
-        CardKind.Repay => [$"Pay ${CardCost(kind):N0}", "Debt falls equally", "Lower interest"],
-        CardKind.Borrow => ["Cash +$700", "Debt +$700", "Risk +5"],
+        CardKind.Repay => [$"Pay ${CardCost(kind):N0}", "Debt falls equally", "Loan balance falls"],
+        CardKind.Borrow => ["Opens 3 loan offers", "One active loan max", "3-month repayment cooldown"],
         CardKind.SellShares => ["Cash +$500", "Share -1.5%", "No new debt"],
         CardKind.CustomerCare => ["Spend $120", "Quality +8", "Share +0.5%"],
         CardKind.Sale => ["Price -$1", "Month demand +15%", "Quality -2"],
@@ -214,7 +223,7 @@ public sealed class Run
         CardKind.SupplierDeal => ["Spend $220", "Unit cost -$0.40", "Permanent saving"],
         CardKind.Overtime => ["Spend $180", "Month capacity +25%", "Quality -2"],
         CardKind.QualityAudit => ["Spend $140", "Risk -8", "Quality +5"],
-        CardKind.Crowdfunding => ["Cash +$600", "Debt +$300", "Share -0.5%"],
+        CardKind.Crowdfunding => ["Cash +$600", "Share -1%", "Equity: no new debt"],
         CardKind.DebtRefinance => ["Spend $200", "Debt -$250", "Risk -4"],
         CardKind.Warehouse => ["Spend $450", "Capacity +75", "Free stock +80"],
         CardKind.ProductRefresh => ["Spend $300", "Quality +4", "Demand +3% forever"],
@@ -242,6 +251,7 @@ public sealed class Run
         Card card = Hand[index]; double cost = CardCost(card.Kind);
         if (Cash < cost) { Message = $"Not enough cash: {card.Name} costs ${cost:N0}."; return false; }
         if (card.Kind == CardKind.Repay && Debt <= 0) { Message = "There is no debt to repay."; return false; }
+        if (card.Kind == CardKind.Borrow) { Message = "Press L to choose from three loans."; return false; }
         Cash -= cost;
         switch (card.Kind)
         {
@@ -252,7 +262,7 @@ public sealed class Run
             case CardKind.Efficiency: UnitCost = Math.Max(3, UnitCost - 0.6); break;
             case CardKind.Factory: Capacity += 150; Inventory += 100; break;
             case CardKind.Repay: Debt = Math.Max(0, Debt - cost); break;
-            case CardKind.Borrow: Cash += 700; Debt += 700; Risk += 5; break;
+            case CardKind.Borrow: break;
             case CardKind.SellShares: Cash += 500; Share = Math.Max(1, Share - 1.5); break;
             case CardKind.CustomerCare: Quality = Math.Min(100, Quality + 8); Share += 0.5; spending += cost; break;
             case CardKind.Sale: Price = Math.Max(5, Price - 1); demandShock *= 1.15; Quality -= 2; break;
@@ -267,7 +277,7 @@ public sealed class Run
             case CardKind.SupplierDeal: UnitCost = Math.Max(3, UnitCost - 0.4); break;
             case CardKind.Overtime: capacityShock *= 1.25; Quality = Math.Max(0, Quality - 2); spending += cost; break;
             case CardKind.QualityAudit: Risk = Math.Max(0, Risk - 8); Quality = Math.Min(100, Quality + 5); spending += cost; break;
-            case CardKind.Crowdfunding: Cash += 600; Debt += 300; Share = Math.Max(1, Share - 0.5); break;
+            case CardKind.Crowdfunding: Cash += 600; Share = Math.Max(1, Share - 1); break;
             case CardKind.DebtRefinance: Debt = Math.Max(0, Debt - 250); Risk = Math.Max(0, Risk - 4); break;
             case CardKind.Warehouse: Capacity += 75; Inventory += 80; break;
             case CardKind.ProductRefresh: Quality = Math.Min(100, Quality + 4); demandBonus += 0.03; break;
@@ -404,7 +414,7 @@ public sealed class Run
             case 2: nextDemand *= 1.1; Share = Math.Min(60, Share + 0.5); break;
             case 3: Cash += 350; Share = Math.Max(1, Share - 0.5); Risk = Math.Min(100, Risk + 3); break;
             case 4: nextCapacity *= 0.9; break;
-            case 5: Cash += 500; Debt += 200; break;
+            case 5: Cash += 500; Share = Math.Max(1, Share - 0.3); break;
             case 6: nextDemand *= 1.15; Quality = Math.Min(100, Quality + 2); break;
             case 7: nextOverheadDiscount += 80; break;
             case 8: Quality = Math.Min(100, Quality + 4); Share = Math.Min(60, Share + 0.3); break;
@@ -544,6 +554,8 @@ public sealed class Run
         InvestmentIncome += pendingIncome; pendingIncome = 0;
         Advertising *= Month == 1 ? 1 : 0.65;
         Message = $"Month {Month}: plan your decisions to meet every quota.";
+        MonthStartStats = CaptureStats();
+        LoanOffers.Clear();
         DealHand();
     }
     void DealHand()

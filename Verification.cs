@@ -10,13 +10,16 @@ public static class Verification
         if (app.Game != null)
         {
             string[] lines = app.Render(120, 42).Lines();
-            Check(lines[33].Contains(new string('_', 48)) && lines[35].Contains("CASH:") && lines[37].Contains("INVENTORY:"), "persistent bottom desk on " + app.Screen);
+            foreach (HitBox control in app.Render(120,42).Buttons.Where(b => b.Action is "tutorialBegin" or "tutorialFinish" or "inspectBack" or "buy" or "next" or "play" or "continue"))
+                Check(lines[control.Y][control.X] == '[', "statistics do not hide controls on " + app.Screen);
+            Check(lines[35].Contains("CASH") && lines[35].Contains("DEBT") && lines[35].Contains("STOCK"), "persistent statistics bars on " + app.Screen);
         }
     }
 
     public static void SelfTest(List<Course> courses)
     {
         assertions = 0;
+        CheckLoansAndStatistics(courses);
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 32 && Run.BoosterPool.Length == 20, "expanded pools");
         foreach (Card card in GameContent.Decisions)
@@ -116,7 +119,7 @@ public static class Verification
             if (eventId == 1) Check(news.Quality == oldQuality - 6, "scandal applies quality loss");
             if (eventId == 2) Check(news.Share == oldShare + 0.5, "good PR applies share gain");
             if (eventId == 3) Check(news.Cash == oldCash + 350 && news.Share == oldShare - 0.5, "new majority trade-off");
-            if (eventId == 5) Check(news.Cash == oldCash + 500 && news.Debt == oldDebt + 200, "investor cash/debt");
+            if (eventId == 5) Check(news.Cash == oldCash + 500 && news.Debt == oldDebt && news.Share == oldShare - 0.3, "investor equity does not bypass loan limits");
             news.SkipBooster(); news.NextMonth();
             Forecast before = news.Preview(); news.FinishDecisions(); news.SkipEvents(); news.ContinueResult();
             Check(double.IsFinite(before.Profit), "pending company effects enter next-month economy");
@@ -149,11 +152,11 @@ public static class Verification
         Canvas selected = app.Render(108, 40);
         Check(selected.Lines()[10][3] == '+' && selected.Lines()[12].Count(c => c == '+') == 4, "two-row selection lift");
         Check(selected.Lines().Any(line => line.Contains("Shout louder")), "funny card explanation visible");
-        Check(selected.Lines()[31].Contains(new string('_', 48)) && selected.Lines()[33].Contains("CASH:"), "old statistics desk restored");
+        Check(selected.Lines()[31].Substring(0, 78).Trim().Length == 0 && selected.Lines()[35].Contains("CASH"), "statistics have a blank row above the bars");
         foreach (Canvas source in new[] { selected, app.Render(200, 60) })
         {
             List<AnimationFrame> frames = CardAnimation.Build(source);
-            Check(frames.Count == 22 && frames.Sum(f => f.Delay) == 796, "animation playback is 25 percent faster");
+            Check(frames.Count == 22 && frames.Sum(f => f.Delay) == 398, "discard animation is faster");
             Check(frames.Take(12).All(f => f.Stage == AnimationStage.Horizontal) && frames[11].CardWidth == 5,
                 "horizontal shrink ends at five columns");
             Check(frames.Skip(12).Take(5).All(f => f.Stage == AnimationStage.Vertical) && frames[16].CardHeight == 1,
@@ -169,27 +172,28 @@ public static class Verification
                 List<AnimationFrame> suction = CardAnimation.Build(source, chosen.Index);
                 HitBox[] cards = source.Buttons.Where(b => b.Action == "select").ToArray();
                 int centeredX = (cards.Min(b => b.X) + cards.Max(b => b.X + b.Width) - chosen.Width) / 2;
-                int dotY = chosen.Y - 3, center = centeredX + chosen.Width / 2;
-                Check(suction.Count == 53 && suction.Take(8).All(f => f.Stage == AnimationStage.MoveToCenter), "selected card moves to center first");
-                Check(suction.Skip(8).Take(23).Sum(f => f.Delay) == 1500 && suction[30].Stage == AnimationStage.Hold, "card waits exactly 1.5 seconds after moving");
+                int dotY = chosen.Y - 2, center = centeredX + chosen.Width / 2;
+                Check(suction.Count == 52 && suction.Take(22).All(f => f.Stage != AnimationStage.MoveToCenter), "selected card waits for all discards");
+                Check(suction.Skip(22).Sum(f => f.Delay) == 1000 && suction.Skip(22).Take(8).All(f => f.Stage == AnimationStage.MoveToCenter), "selected move and suction last exactly one second");
                 for (int row = 0; row < chosen.Height; row++)
-                    Check(suction[30].Canvas.Lines()[chosen.Y + row].Substring(centeredX, chosen.Width) == source.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width), "centered card retains original text while waiting");
-                Check(suction[31].Stage == AnimationStage.Suction && suction[47].Canvas.Lines()[dotY][center] == '.', "curving begins after pause and ends at centered dot");
-                Check(suction[48].Canvas.Lines()[dotY][center] == '*', "selected star burst occurs above the middle");
-                Check(suction[48].Canvas.Lines()[chosen.Y + chosen.Height / 2][center] == ' ', "selected card does not collapse at its old center");
+                    Check(suction[29].Canvas.Lines()[chosen.Y + row].Substring(centeredX, chosen.Width) == source.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width), "centered card retains original text while waiting");
+                Check(suction[30].Stage == AnimationStage.Suction && suction[46].Canvas.Lines()[dotY][center] == '.', "curving begins after moving and ends at the lowered dot");
+                Check(suction[47].Canvas.Lines()[dotY][center] == '*', "selected star burst occurs above the middle");
+                Check(suction[47].Canvas.Lines()[chosen.Y + chosen.Height / 2][center] == ' ', "selected card does not collapse at its old center");
                 Check(suction[^1].Canvas.Lines().Skip(chosen.Y).Take(chosen.Height).All(line => line.Substring(chosen.X, chosen.Width).Trim().Length == 0), "suction leaves no card ghost at original position");
                 Check(suction[^1].Canvas.Lines().Skip(chosen.Y).Take(chosen.Height).All(line => line.Substring(centeredX, chosen.Width).Trim().Length == 0), "suction leaves no card ghost in middle");
                 HitBox other = cards.First(b => b.Index != chosen.Index);
-                Check(suction[25].Canvas.Lines()[other.Y + other.Height / 2][other.X + other.Width / 2] == '*' || other.X == centeredX, "unchosen cards collapse while selected card waits");
+                Check(suction[17].Canvas.Lines()[other.Y + other.Height / 2][other.X + other.Width / 2] == '*' || other.X == centeredX, "unchosen cards collapse before selected moves");
                 Check(suction.All(f => f.Areas.Any(a => a.Y <= dotY - 1 && a.X <= centeredX && a.X + a.Width >= centeredX + chosen.Width)), "redraw includes slide and centered flight path");
-                int deskY = source.Lines().Select((line, y) => (line, y)).First(pair => pair.line.Contains(new string('_', 48))).y;
-                Check(suction.All(f => f.Canvas.Lines()[deskY + 2] == source.Lines()[deskY + 2]), "desk stays visible throughout animation");
+                Check(suction.All(f => f.Canvas.Lines()[source.Height > 46 ? 42 : 35] == source.Lines()[source.Height > 46 ? 42 : 35]), "statistics stay visible throughout animation");
+                for (int row = 0; row < chosen.Height; row++)
+                    Check(suction[21].Canvas.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width) == source.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width), "selected card waits intact at original position");
             }
         }
         Key(app, ConsoleKey.I); Check(app.Screen == Screen.Inspect, "full card explanation");
         Key(app, ConsoleKey.Escape); Check(app.Screen == Screen.Table, "inspection preserves selection");
         Key(app, ConsoleKey.Enter); Check(app.TutorialStep == 2, "tutorial advances after actual card play");
-        Check(app.TakeAnimationFrames().Count == 53 && app.TakeAnimationFrames().Count == 0, "successful card action queues one animation");
+        Check(app.TakeAnimationFrames().Count == 52 && app.TakeAnimationFrames().Count == 0, "successful card action queues one animation");
         Key(app, ConsoleKey.R); Check(app.TutorialStep == 3 && app.Game.Rerolls == 0, "tutorial teaches actual reroll");
         Key(app, ConsoleKey.E); Key(app, ConsoleKey.E); Key(app, ConsoleKey.Enter);
         Check(app.Screen == Screen.SpecialEvent, "tutorial shows company news");
@@ -346,6 +350,87 @@ public static class Verification
         Console.WriteLine($"Endless sample: {endlessResult.Cleared - 12} extra quotas cleared; ended in month {endlessResult.Month}.");
         Console.WriteLine($"SELF-TEST PASSED: {assertions} checks; 180 campaigns ({won} initial wins); {retries} seeded retries verify every combination is winnable.");
     }
+
+    static void CheckLoansAndStatistics(List<Course> courses)
+    {
+        void set(Run run, string property, object value) => typeof(Run).GetProperty(property)!.SetValue(run, value);
+        for (int seed = 0; seed < 80; seed++)
+        {
+            var run = new Run(courses[0], 0, Difficulty.Easy, seed);
+            Check(run.Debt == 0 && run.CanBorrow, "new company starts with loan access and no active loan");
+            double small = Math.Max(500, Math.Max(0, run.ProfitTarget - run.Preview().Profit) + Math.Max(0, 300 - run.Cash) + 300);
+            run.PrepareLoans(); LoanOffer[] original = run.LoanOffers.ToArray(); run.PrepareLoans();
+            Check(original.SequenceEqual(run.LoanOffers) && original.Length == 3, "three stable offers, no browsing rerolls");
+            for (int i = 0; i < 3; i++)
+            {
+                LoanOffer offer = original[i];
+                double amountVariation = Math.Abs(offer.Amount / (small * (i + 1)) - 1);
+                double rateVariation = Math.Abs(offer.InterestRate / (.5 * (i + 1)) - 1);
+                Check(amountVariation >= .0499 && amountVariation <= .1001 && rateVariation >= .0499 && rateVariation <= .1001, "loan amount and rate vary by five to ten percent");
+                Check(Math.Abs(offer.Total - offer.Amount - offer.Fee) < .011, "interest fee is included exactly once in repayment");
+            }
+            double cash = run.Cash, profit = run.Preview().Profit;
+            Check(run.TakeLoan(1) && run.Cash == cash + original[1].Amount && run.Debt == original[1].Total, "loan credits principal and creates total repayment balance");
+            Check(run.Preview().Profit == profit && run.HasActiveLoan && !run.CanBorrow, "borrowing is cash, not sales profit, and blocks a second loan");
+            double balance = run.Debt; cash = run.Cash;
+            Check(!run.TakeLoan(0) && run.Debt == balance && run.Cash == cash, "active loan blocks additional borrowing atomically");
+            set(run, nameof(Run.Cash), 125.0);
+            Check(run.RepayLoan() && run.Debt == balance - 125 && run.NextLoanMonth == 1, "partial repayment does not start cooldown");
+            set(run, nameof(Run.Cash), run.Debt + 500);
+            Check(run.RepayLoan() && run.Debt == 0 && Math.Abs(run.Cash - 500) < .001 && run.NextLoanMonth == 4, "full repayment starts three-month cooldown");
+            set(run, nameof(Run.Month), 2); Check(!run.CanBorrow, "one month after repayment is blocked");
+            set(run, nameof(Run.Month), 3); Check(!run.CanBorrow, "two months after repayment are blocked");
+            set(run, nameof(Run.Month), 4); Check(run.CanBorrow && run.TakeLoan(0), "borrowing unlocks three months after repayment");
+            set(run, nameof(Run.Month), 8); Check(!run.CanBorrow, "elapsed months never bypass an active balance");
+            set(run, nameof(Run.Cash), run.Debt + 500); run.RepayLoan();
+            Check(run.NextLoanMonth == 11, "cooldown starts at repayment month, not borrowing month");
+        }
+        var rescue = new Run(courses.Single(c => c.Name == "Marketing"), 0, Difficulty.Easy, 14);
+        set(rescue, nameof(Run.Price), 5.0); rescue.FinishDecisions(); rescue.SkipEvents();
+        Check(rescue.LastReport!.Failures.Contains("Profit") && rescue.Cleared == 0, "rescue fixture actually misses profit quota");
+        double actualProfit = rescue.LastReport.Profit, gap = rescue.BridgeCost, actualRevenue = rescue.LastReport.Revenue;
+        Check(rescue.TakeLoan(2) && rescue.Cleared == 1 && rescue.LastReport.Failures.Count == 0, "loan funds a missed money quota and continues the run");
+        Check(rescue.LastReport.Profit == actualProfit && rescue.LastReport.Revenue == actualRevenue && rescue.LastReport.BridgeFunding == gap, "bridge support is recorded separately from true earnings");
+        rescue.ContinueResult(); Check(rescue.Phase == Phase.SpecialEvent && rescue.HasActiveLoan, "rescued month enters normal rewards with loan outstanding");
+        var service = new Run(courses.Single(c => c.Name == "Microeconomics"), 0, Difficulty.Easy, 15);
+        set(service, nameof(Run.Quality), 0.0); service.FinishDecisions(); service.SkipEvents();
+        double beforeCash = service.Cash;
+        Check(!service.TakeLoan(2) && service.Cash == beforeCash && service.Debt == 0, "loans cannot erase non-money failures");
+        var finance = new Run(courses.Single(c => c.Name == "Finance"), 0, Difficulty.Easy, 16);
+        finance.FinishDecisions(); finance.SkipEvents(); finance.PrepareLoans();
+        finance.LoanOffers[0] = new("Too much debt", 5000, 1);
+        Check(!finance.TakeLoan(0) && finance.Debt == 0, "result-screen borrowing respects debt quota even after an initial pass");
+        var cards = new Run(courses[0], 0, Difficulty.Easy, 17); cards.TakeLoan(0);
+        set(cards, nameof(Run.Debt), 200.0); cards.Hand[0] = new(CardKind.Repay, "Repay");
+        Check(cards.Play(0) && cards.Debt == 0 && cards.NextLoanMonth == cards.Month + 3, "repayment card also starts cooldown");
+        cards.Hand[0] = new(CardKind.Borrow, "Loan Desk"); beforeCash = cards.Cash;
+        Check(!cards.Play(0) && cards.Cash == beforeCash && cards.Debt == 0, "legacy borrowing card cannot bypass loan selection or cooldown");
+        var app = new GameApp(courses, new Storage(Path.Combine(Path.GetTempPath(), "TranslateUni-credit-tests-" + Guid.NewGuid().ToString("N"))));
+        var normal = new Run(courses[0], 0, Difficulty.Easy, 18);
+        typeof(GameApp).GetProperty(nameof(GameApp.Game))!.SetValue(app, normal);
+        typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.Table);
+        Key(app, ConsoleKey.L); Check(app.Screen == Screen.Loans && app.Render(108,40).Buttons.Count(b => b.Action == "select") == 3, "L opens three loan cards");
+        Key(app, ConsoleKey.D3); Key(app, ConsoleKey.Enter);
+        Check(app.Screen == Screen.Table && normal.HasActiveLoan && app.TakeAnimationFrames().Count == 52, "loan choice returns to game and animates selected offer");
+        Key(app, ConsoleKey.L); Key(app, ConsoleKey.P);
+        Check(normal.Debt == 0 && !normal.CanBorrow, "loan desk repayment applies cooldown");
+        Key(app, ConsoleKey.Escape); Check(app.Screen == Screen.Table, "loan screen returns safely");
+        foreach ((int width, int height) in new[] { (108,40), (120,42), (140,46) })
+        {
+            Canvas frame = app.Render(width,height); string[] lines = frame.Lines();
+            int tableWidth = width - 30;
+            Check(lines[31][..tableWidth].Trim().Length == 0 && GameApp.StatChangeRow == GameApp.StatBarTop - 2, "change labels have exactly one empty row before bars");
+            Check(GameApp.StatBarBottom <= 29 + 5 && lines[35].Contains("CASH") && lines[35].Contains("SERVICE"), "all ten bars fit within five rows below claim text");
+            Check(Enumerable.Range(32,3).All(y => lines[y][..tableWidth].Count(c => c == '│') == 20), "every statistic has its own vertical progress bar");
+        }
+        typeof(Run).GetProperty(nameof(Run.Phase))!.SetValue(normal, Phase.Shop);
+        normal.ShopOffers.Clear(); normal.ShopOffers.Add(ShopUpgrades.Offer(0,3)); normal.ShopTiers[0] = 3;
+        typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.Shop);
+        Canvas shop = app.Render(108,40); string[] shopLines = shop.Lines();
+        Check(shopLines[5].Contains("SELECTED") && shop.ColorAt(3,5) == ConsoleColor.White, "selected shop item has an explicit white marker");
+        Check(shopLines[9].Contains("MAX TIER") && shop.ColorAt(3,9) == ConsoleColor.Green, "completed upgrade is bright green");
+    }
+
     static Run ClearFirst(Course course, int seed)
     {
         var run = new Run(course, 0, Difficulty.Easy, seed);
@@ -423,7 +508,7 @@ public static class Verification
         }
         capture("01-main"); Key(app, ConsoleKey.T); capture("02-learning-guide"); Key(app, ConsoleKey.Enter); capture("02-tutorial-intro"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("03-cards-and-desk");
         var flight = CardAnimation.Build(app.Render(120, 42), 0);
-        foreach (int i in new[] { 0, 7, 15, 30, 38, 47, 50, 52 })
+        foreach (int i in new[] { 0, 17, 21, 29, 38, 46, 49, 51 })
             File.WriteAllLines(Path.Combine(directory, $"03-flight-{i:00}.txt"), flight[i].Canvas.Lines());
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.R); Key(app, ConsoleKey.E); capture("04-events"); Key(app, ConsoleKey.E); capture("05-report");
         Key(app, ConsoleKey.Enter); capture("06-company-news"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("07-boosters");
