@@ -1,930 +1,569 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
 
-class Program
+namespace BusinessGame;
+
+public static class Program
 {
-    const int CardWidth = 22;
-    const int CardHeight = 10;
-    const int CardSpace = 24;
-    static int rerolls = 3;
-    const int CardBaseY = 2;
-    const int SelectionLift = 2;
-    static double cash = 5000, debt = 1200, price = 25, unitCost = 12, share = 18;
-    static int inventory = 450;
-    static bool inShop;
-    static int shopSelection;
-    static string shopMessage = "Select an item with 1-6 or arrows, then ENTER to buy.";
-
-    sealed class Decoration
+    public static int Main(string[] args)
     {
-        public string Name { get; }
-        public int Cost { get; }
-        public string Boost { get; }
-        public string[] Art { get; }
-        public Action Apply { get; }
-        public bool Owned { get; set; }
-
-        public Decoration(string name, int cost, string boost, string[] art, Action apply)
-        {
-            Name = name; Cost = cost; Boost = boost; Art = art; Apply = apply;
-        }
-    }
-
-    static readonly Decoration[] ShopItems =
-    {
-        new("Desk Plant", 100, "Share +0.5%", new[] { "  \\|/  ", "  /|\\  ", "  [__] " }, () => share += 0.5),
-        new("Desk Lamp", 150, "Unit cost -$0.25", new[] { "  ___  ", " /___\\ ", "   |__ " }, () => unitCost = Math.Max(0, unitCost - 0.25)),
-        new("Wall Clock", 125, "Inventory +15", new[] { " .---. ", " | / | ", " '---' " }, () => inventory += 15),
-        new("Motivation Art", 175, "Price +$0.50", new[] { " +---+ ", " |UP!| ", " +---+ " }, () => price += 0.5),
-        new("Lucky Cat", 200, "Extra reroll +1", new[] { " /\\_/\\ ", " (o.o) ", "  /|_  " }, () => rerolls++),
-        new("Desk Fountain", 150, "Debt -$75", new[] { "  ~|~  ", " (_|_) ", " [___] " }, () => debt = Math.Max(0, debt - 75))
-    };
-
-
-    static Random random = new Random();
-
-    // Set to false if you never want duplicate cards,
-    // even when the library contains fewer than three cards.
-    const bool AllowDuplicateFallback = true;
-
-    static List<string[]> CardLibrary = new List<string[]>
-{
-    new string[]
-    {
-        "Sell part of",
-        "the company",
-        "",
-        "Cash: +$250",
-        "Share: -10%"
-    },
-
-    new string[]
-    {
-        "Advertise product",
-        "",
-        "Cash: -$100",
-        "Inventory: -50",
-        "Price: +$5"
-    },
-
-    new string[]
-    {
-        "Black Friday Sale",
-        "",
-        "Cash: +$500",
-        "Inventory: -100",
-        "Price: -$10"
-    },
-
-    // Add more cards below this line!
-
-    new string[]
-    {
-        "New Factory",
-        "",
-        "Cash: -$1000",
-        "Inventory: +200",
-        "Price: +$2"
-    },
-
-    new string[]
-    {
-        "Market Crash",
-        "",
-        "Cash: -$500",
-        "Share: -5%"
-    },
-
-    new string[]
-    {
-        "Successful Launch",
-        "",
-        "Cash: +$750",
-        "Inventory: -25",
-        "Price: +$3"
-    }
-};
-
-
-    static void AnimateChosenCardAway(string[] card, int selected)
-    {
-        int firstCardX = Math.Max(
-            0,
-            (Console.WindowWidth - CardSpace * 3) / 2
-        );
-        int centerX = firstCardX + selected * CardSpace;
-
-        int baseY = CardBaseY - SelectionLift;
-
-        // Shrink the chosen card horizontally
-        for (int frame = 0; frame < 10; frame++)
-        {
-            double progress = (frame + 1) / 10.0;
-
-            int width = Math.Max(
-                5,
-                CardWidth - (int)Math.Round(progress * (CardWidth - 5))
-            );
-
-            int x = centerX + (CardWidth - width) / 2;
-
-            // Erase only the card's previous drawing
-            for (int row = 0; row < CardHeight; row++)
-                WriteAt(centerX, baseY + row, new string(' ', CardSpace));
-
-            DrawCardAt(card, x, baseY, width, CardHeight);
-
-            Thread.Sleep(25);
-        }
-
-        // Collapse vertically
-        for (int frame = 0; frame < 5; frame++)
-        {
-            for (int row = 0; row < CardHeight; row++)
-                WriteAt(centerX, baseY + row, new string(' ', CardSpace));
-
-            int middleX = centerX + CardSpace / 2;
-            int middleY = baseY + CardHeight / 2;
-
-            if (frame < 3)
-            {
-                WriteAt(middleX, middleY, "*");
-                WriteAt(middleX - 1, middleY, "<");
-                WriteAt(middleX + 1, middleY, ">");
-            }
-
-            Thread.Sleep(35);
-        }
-
-        // Final star-like disappearance
-        for (int frame = 0; frame < 4; frame++)
-        {
-            for (int row = 0; row < CardHeight; row++)
-                WriteAt(centerX, baseY + row, new string(' ', CardSpace));
-
-            int middleX = centerX + CardSpace / 2;
-            int middleY = baseY + CardHeight / 2;
-
-            if (frame == 0)
-            {
-                WriteAt(middleX - 1, middleY, "*");
-                WriteAt(middleX + 1, middleY, "*");
-            }
-            else if (frame == 1)
-            {
-                WriteAt(middleX, middleY - 1, ".");
-                WriteAt(middleX, middleY + 1, ".");
-            }
-
-            Thread.Sleep(35);
-        }
-
-        for (int row = 0; row < CardHeight; row++)
-            WriteAt(centerX, baseY + row, new string(' ', CardSpace));
-    }
-
-
-    static string[][] DrawThreeCards()
-    {
-        if (CardLibrary.Count == 0)
-            throw new InvalidOperationException(
-                "The card library is empty!"
-            );
-
-        // Make a shuffled copy of the available cards.
-        List<string[]> shuffled = new List<string[]>(CardLibrary);
-
-        // Fisher-Yates shuffle
-        for (int i = shuffled.Count - 1; i > 0; i--)
-        {
-            int j = random.Next(i + 1);
-
-            string[] temp = shuffled[i];
-            shuffled[i] = shuffled[j];
-            shuffled[j] = temp;
-        }
-
-        // Take three different cards whenever possible.
-        List<string[]> result = new List<string[]>();
-
-        int uniqueCount = Math.Min(3, shuffled.Count);
-
-        for (int i = 0; i < uniqueCount; i++)
-            result.Add(shuffled[i]);
-
-        // OPTIONAL: allow duplicates if fewer than 3 cards exist.
-        if (result.Count < 3)
-        {
-            if (!AllowDuplicateFallback)
-            {
-                throw new InvalidOperationException(
-                    "You need at least three cards in CardLibrary."
-                );
-            }
-
-            while (result.Count < 3)
-            {
-                result.Add(
-                    CardLibrary[random.Next(CardLibrary.Count)]
-                );
-            }
-        }
-
-        return result.ToArray();
-    }
-
-    static void Main()
-    {
-        string[][] cards = DrawThreeCards();
-        int selected = -1;
-        bool confirmed = false;
-
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         try
         {
-            using var input = new GameInput();
-            Console.CursorVisible = false;
+            List<Course> courses = Catalog.Load();
+            if (args.Contains("--self-test")) { Verification.SelfTest(courses); return 0; }
+            if (args.Contains("--preview")) { Verification.Preview(courses); return 0; }
+            if (Console.IsInputRedirected || Console.IsOutputRedirected)
+            { Console.WriteLine("Run this game in an interactive terminal, or use --self-test."); return 1; }
+            TryResize();
+            using var input = new TerminalInput();
+            var app = new GameApp(courses, new Storage());
             Console.Clear();
-
-            DrawScene(cards, selected, false);
-
-            while (true)
+            while (!app.Quit)
             {
-                ConsoleKey key = input.ReadKey();
-
-                if (key == ConsoleKey.S || (inShop && key == ConsoleKey.Escape))
+                int width = Math.Min(120, Console.WindowWidth), height = Math.Min(38, Console.WindowHeight);
+                Canvas frame = app.Render(width, height);
+                try { frame.Flush(); }
+                catch (ArgumentOutOfRangeException) { continue; } // The window was resized during drawing.
+                Input next = input.Read();
+                if (width < 80 || height < 30)
                 {
-                    inShop = !inShop;
-                    Console.Clear();
-                    if (inShop) DrawShop();
-                    else DrawScene(cards, selected, confirmed);
+                    if (next.Key is ConsoleKey.Escape or ConsoleKey.Q) app.Exit();
                     continue;
                 }
-
-                if (key == ConsoleKey.Escape)
-                    break;
-
-                if (inShop)
-                {
-                    HandleShopKey(key);
-                    DrawShop();
-                    continue;
-                }
-
-                if (key == ConsoleKey.R && rerolls > 0)
-                {
-                    if (confirmed)
-                    {
-                        AnimateChosenCardAway(cards[selected], selected);
-                    }
-                    TryReroll(ref cards, ref selected, ref confirmed);
-                    DrawScene(cards, selected, confirmed);
-                    continue;
-                }
-
-                if (confirmed) continue;
-
-                int previous = selected;
-
-                // Arrows move between cards without wrapping
-                if (key == ConsoleKey.LeftArrow ||
-                    key == ConsoleKey.UpArrow)
-                {
-                    selected = Math.Max(0, selected - 1);
-                }
-                else if (key == ConsoleKey.RightArrow ||
-                         key == ConsoleKey.DownArrow)
-                {
-                    selected = Math.Min(cards.Length - 1, selected + 1);
-                }
-
-                // Keep number-key selection too
-                else if (key == ConsoleKey.D1 ||
-                         key == ConsoleKey.NumPad1)
-                    selected = 0;
-
-                else if (key == ConsoleKey.D2 ||
-                         key == ConsoleKey.NumPad2)
-                    selected = 1;
-
-                else if (key == ConsoleKey.D3 ||
-                         key == ConsoleKey.NumPad3)
-                    selected = 2;
-
-                else if (key == ConsoleKey.Spacebar)
-                    selected = -1;
-                else if (key == ConsoleKey.Enter && selected >= 0)
-                {
-                    AnimateAway(cards, selected);
-                    ApplyCardEffects(cards[selected]);
-                    confirmed = true;
-                    DrawScene(cards, selected, true);
-                    continue;
-                }
-
-                if (selected != previous)
-                    DrawScene(cards, selected, false);
+                app.Handle(next, frame);
             }
-        }
-        finally
-        {
-            Console.ResetColor();
-            Console.CursorVisible = true;
             Console.Clear();
+            return 0;
         }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Text.Json.JsonException)
+        { Console.WriteLine("The game could not start: " + ex.Message); return 1; }
     }
-
-    static bool TryReroll(ref string[][] cards, ref int selected, ref bool confirmed)
+    static void TryResize()
     {
-        if (rerolls <= 0) return false;
-        cards = DrawThreeCards();
-        rerolls--;
-        selected = -1;
-        confirmed = false;
-        return true;
-    }
-
-    static void ApplyCardEffects(string[] card)
-    {
-        foreach (string line in card)
+        if (!OperatingSystem.IsWindows()) return;
+        try
         {
-            string[] parts = line.Split(':', 2);
-            if (parts.Length != 2) continue;
-            string amount = parts[1].Replace("$", "").Replace("%", "").Trim();
-            if (!double.TryParse(amount, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)) continue;
-            switch (parts[0].Trim())
-            {
-                case "Cash": cash += value; break;
-                case "Debt": debt = Math.Max(0, debt + value); break;
-                case "Price": price = Math.Max(0, price + value); break;
-                case "Unit cost": unitCost = Math.Max(0, unitCost + value); break;
-                case "Inventory": inventory = Math.Max(0, inventory + (int)value); break;
-                case "Share": share = Math.Clamp(share + value, 0, 100); break;
-            }
+            int width = Math.Max(Console.WindowWidth, Math.Min(100, Console.LargestWindowWidth));
+            int height = Math.Max(Console.WindowHeight, Math.Min(34, Console.LargestWindowHeight));
+            if (Console.BufferWidth < width || Console.BufferHeight < height)
+                Console.SetBufferSize(Math.Max(Console.BufferWidth, width), Math.Max(Console.BufferHeight, height));
+            Console.SetWindowSize(width, height);
         }
+        catch (Exception ex) when (ex is IOException or ArgumentOutOfRangeException or PlatformNotSupportedException) { }
     }
+}
 
-    static bool BuyDecoration(int index)
-    {
-        if (index < 0 || index >= ShopItems.Length) return false;
-        Decoration item = ShopItems[index];
-        if (item.Owned) { shopMessage = "You already own " + item.Name + "."; return false; }
-        if (cash < item.Cost) { shopMessage = "Not enough cash for " + item.Name + "."; return false; }
-        cash -= item.Cost;
-        item.Apply();
-        item.Owned = true;
-        shopMessage = "Bought " + item.Name + "! " + item.Boost + ".";
-        return true;
-    }
+public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing }
 
-    static void HandleShopKey(ConsoleKey key)
-    {
-        int number = key >= ConsoleKey.D1 && key <= ConsoleKey.D6 ? key - ConsoleKey.D1
-            : key >= ConsoleKey.NumPad1 && key <= ConsoleKey.NumPad6 ? key - ConsoleKey.NumPad1 : -1;
-        if (number >= 0) shopSelection = number;
-        else if (key == ConsoleKey.LeftArrow) shopSelection = Math.Max(0, shopSelection - 1);
-        else if (key == ConsoleKey.RightArrow) shopSelection = Math.Min(5, shopSelection + 1);
-        else if (key == ConsoleKey.UpArrow) shopSelection = Math.Max(0, shopSelection - 3);
-        else if (key == ConsoleKey.DownArrow) shopSelection = Math.Min(5, shopSelection + 3);
-        else if (key == ConsoleKey.Enter) BuyDecoration(shopSelection);
-    }
+public sealed class GameApp
+{
+    public Screen Screen { get; private set; } = Screen.Main;
+    public Run? Game { get; private set; }
+    public bool Quit { get; private set; }
+    readonly List<Course> courses;
+    readonly Storage storage;
+    int menuIndex, courseIndex, topicIndex, difficultyIndex, selected = -1, shopIndex;
+    bool browsing, recorded;
+    string notice = "";
+    Screen beforePause;
+    static readonly string[] Menu = ["Student / Team - PLAY", "Quick Demo - FreshFizz", "Course Library", "Previous Results", "Settings", "Lecturer / Learning Guide", "Product Analytics", "Exit"];
 
-    static void DrawShop()
+    public GameApp(List<Course> courses, Storage storage)
+    { this.courses = courses; this.storage = storage; difficultyIndex = (int)storage.Preferences.Difficulty; }
+    public void Exit() => Quit = true;
+
+    public Canvas Render(int width, int height)
     {
-        int left = Math.Max(0, (Console.WindowWidth - 72) / 2);
-        for (int y = 0; y < Math.Min(25, Console.BufferHeight); y++)
-            WriteAt(0, y, new string(' ', Math.Max(0, Console.BufferWidth - 1)));
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        WriteAt(left, 0, "OFFICE ODDITIES  |  Cash: $" + cash.ToString("N2"));
-        Console.ResetColor();
-        for (int i = 0; i < ShopItems.Length; i++)
+        var c = new Canvas(width, height);
+        if (width < 80 || height < 30)
         {
-            Decoration item = ShopItems[i];
-            int x = left + i % 3 * 24;
-            int y = 2 + i / 3 * 7;
-            Console.ForegroundColor = item.Owned ? ConsoleColor.DarkGray
-                : i == shopSelection ? ConsoleColor.Yellow : ConsoleColor.Gray;
-            for (int row = 0; row < item.Art.Length; row++) WriteAt(x + 7, y + row, item.Art[row]);
-            WriteAt(x, y + 3, $"{i + 1}. {item.Name}");
-            WriteAt(x, y + 4, item.Owned ? "OWNED" : "$" + item.Cost + "  " + item.Boost);
-            WriteAt(x, y + 5, item.Boost);
-            Console.ForegroundColor = ConsoleColor.DarkYellow;
-            WriteAt(x, y + 6, "======================");
+            c.Center(Math.Max(0, height / 2 - 1), "Please resize this terminal to at least 80 x 30.", ConsoleColor.Yellow);
+            c.Center(Math.Max(1, height / 2 + 1), "ESC: Exit | Recommended: 100 x 34");
+            return c;
         }
-        Console.ForegroundColor = ConsoleColor.White;
-        WriteAt(left + 5, 17, "  .----.    Welcome! A little style goes a long way.");
-        WriteAt(left + 5, 18, "  |o  o|    I'm your office shopkeeper.");
-        WriteAt(left + 5, 19, "  | -- |    All boosts last for this game.");
-        WriteAt(left + 5, 20, " /|____|\\");
-        Console.ForegroundColor = ConsoleColor.DarkYellow;
-        WriteAt(left, 21, new string('=', 70));
-        Console.ResetColor();
-        WriteAt(left, 22, shopMessage);
-        WriteAt(left, 23, "1-6 / arrows: Select | ENTER: Buy | S / ESC: Back to table");
-        DrawButton(ShopButtonX(), 15, "S");
-    }
-
-    static void DrawScene(
-        string[][] cards,
-        int selected,
-        bool confirmed)
-    {
-        // Clear only the card area, not the entire screen
-        ClearCardArea();
-
-        int screenWidth = Console.WindowWidth;
-        int totalWidth = CardSpace * 3;
-        int startX = Math.Max(0, (screenWidth - totalWidth) / 2);
-        int baseY = 2;
-
-        // Draw all three cards. Highlight the currently selected card.
-        for (int i = 0; i < cards.Length; i++)
+        switch (Screen)
         {
-            if (confirmed && i != selected) continue;
-            if (i == selected)
-                Console.ForegroundColor = confirmed
-                    ? ConsoleColor.Green
-                    : ConsoleColor.Yellow;
-            else
-                Console.ForegroundColor = ConsoleColor.Gray;
-
-            DrawCardAt(
-                cards[i],
-                startX + i * CardSpace,
-                baseY - (i == selected ? SelectionLift : 0),
-                CardWidth,
-                CardHeight
-            );
+            case Screen.Main: DrawMain(c); break;
+            case Screen.Courses: DrawCourses(c); break;
+            case Screen.Topics: DrawTopics(c); break;
+            case Screen.Difficulty: DrawDifficulty(c); break;
+            case Screen.Table: DrawTable(c, false); break;
+            case Screen.Events: DrawTable(c, true); break;
+            case Screen.Result: DrawResult(c); break;
+            case Screen.Booster: DrawBooster(c); break;
+            case Screen.Shop: DrawShop(c); break;
+            case Screen.Reward: DrawReward(c); break;
+            case Screen.End: DrawEnd(c); break;
+            case Screen.Pause: DrawPause(c); break;
+            case Screen.History: DrawHistory(c); break;
+            case Screen.Settings: DrawSettings(c); break;
+            case Screen.Guide: DrawGuide(c); break;
+            case Screen.Analytics: DrawAnalytics(c); break;
+            case Screen.Briefing: DrawBriefing(c); break;
         }
-        Console.ResetColor();
-
-        // Keep your statistics values and drawing unchanged
-        if (Console.BufferHeight > 19)
-            Console.SetCursorPosition(0, 14);
-
-        DrawStatistics(
-            cash: cash,
-            debt: debt,
-            price: price,
-            unitCost: unitCost,
-            inventory: inventory,
-            share: share
-        );
-        DrawRerollCounter();
-        DrawButton(ShopButtonX(), 15, "S");
-
-        // Three empty lines at the bottom
-        Console.WriteLine();
-        Console.WriteLine();
-        Console.WriteLine();
-
-        WriteAt(
-            0,
-            Math.Min(23, Console.BufferHeight - 1),
-            confirmed
-                ? (rerolls > 0
-                    ? $"Confirmed | R: Reroll ({rerolls}) | S: Shop | ESC: Exit"
-                    : "No rerolls left | S: Shop | ESC: Exit")
-                : $"1-3 / arrows: Select | ENTER: Play | SPACE: Clear | R: {rerolls} | S: Shop | ESC: Exit"
-        );
+        if (notice.Length > 0) c.Text(3, height - 3, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
+        else if (storage.Notice.Length > 0) c.Text(3, height - 3, storage.Notice, ConsoleColor.Yellow);
+        return c;
     }
-
-    static void AnimateAway(string[][] cards, int selected)
+    public void Handle(Input input, Canvas frame)
     {
-        int startX = Math.Max(
-            0,
-            (Console.WindowWidth - CardSpace * 3) / 2
-        );
-
-        int baseY = 2;
-
-        // 12 frames x 35 ms = 420 ms
-        // 5 vertical frames x 45 ms = 225 ms
-        // 5 star frames x 70 ms = 350 ms
-        // Total animation time: approximately 995 ms
-        for (int frame = 0; frame < 12; frame++)
+        notice = "";
+        if (input.X >= 0)
         {
-            double progress = (frame + 1) / 12.0;
-
-            for (int i = 0; i < cards.Length; i++)
-            {
-                if (i == selected)
-                    continue;
-
-                int originalX = startX + i * CardSpace;
-
-                int width = Math.Max(
-                    5,
-                    CardWidth - (int)Math.Round(
-                        progress * (CardWidth - 5)
-                    )
-                );
-
-                // Fade text into spaces while the walls shrink
-                DrawAnimatedCard(
-                    cards[i],
-                    originalX,
-                    baseY,
-                    width,
-                    CardHeight,
-                    progress
-                );
-            }
-
-            Thread.Sleep(35);
-        }
-
-        // Collapse vertically once the cards are five characters wide
-        for (int frame = 0; frame < 5; frame++)
-        {
-            int height = CardHeight - (frame + 1) * 2;
-
-            if (height < 1)
-                height = 1;
-
-            for (int i = 0; i < cards.Length; i++)
-            {
-                if (i == selected)
-                    continue;
-
-                int originalX = startX + i * CardSpace;
-
-                DrawAnimatedCard(
-                    cards[i],
-                    originalX,
-                    baseY,
-                    5,
-                    height,
-                    1.0
-                );
-            }
-
-            Thread.Sleep(45);
-        }
-
-        // Star-like disappearance
-        for (int frame = 0; frame < 5; frame++)
-        {
-            for (int i = 0; i < cards.Length; i++)
-            {
-                if (i == selected)
-                    continue;
-
-                int originalX = startX + i * CardSpace;
-
-                ClearOneCard(originalX, baseY);
-
-                int centerX = originalX + CardSpace / 2;
-                int centerY = baseY + CardHeight / 2;
-
-                if (frame == 0)
-                {
-                    WriteAt(centerX, centerY, "*");
-                }
-                else if (frame == 1)
-                {
-                    WriteAt(centerX, centerY, "+");
-                    WriteAt(centerX - 1, centerY, "*");
-                    WriteAt(centerX + 1, centerY, "*");
-                }
-                else if (frame == 2)
-                {
-                    WriteAt(centerX - 1, centerY - 1, "\\");
-                    WriteAt(centerX + 1, centerY - 1, "/");
-                    WriteAt(centerX, centerY, "*");
-                    WriteAt(centerX - 1, centerY + 1, "/");
-                    WriteAt(centerX + 1, centerY + 1, "\\");
-                }
-                else if (frame == 3)
-                {
-                    WriteAt(centerX - 2, centerY, ".");
-                    WriteAt(centerX + 2, centerY, ".");
-                    WriteAt(centerX, centerY - 1, ".");
-                    WriteAt(centerX, centerY + 1, ".");
-                }
-                // Frame 4 stays empty
-            }
-
-            Thread.Sleep(70);
-        }
-
-        // Clear all traces of the unselected cards
-        for (int i = 0; i < cards.Length; i++)
-        {
-            if (i != selected)
-                ClearOneCard(startX + i * CardSpace, baseY);
-        }
-    }
-
-    static void DrawRerollCounter()
-    {
-        int boardWidth = 54;
-        int boardLeft = Math.Max(
-            0,
-            (Console.WindowWidth - boardWidth) / 2
-        );
-
-        // Keep the counter to the left of the statistics board.
-        int x = Math.Max(0, boardLeft - 7);
-        int y = 15;
-
-        DrawButton(x, y, "R");
-        WriteAt(x, y + 3, $" x{rerolls} ");
-    }
-
-    static int ShopButtonX() => Math.Max(0, Math.Min(Console.WindowWidth - 6,
-        Math.Max(0, (Console.WindowWidth - 54) / 2) + 56));
-
-    static void DrawButton(int x, int y, string label)
-    {
-        WriteAt(x, y, ",---,");
-        WriteAt(x, y + 1, "| " + label + " |");
-        WriteAt(x, y + 2, "'---'");
-    }
-
-    static void DrawAnimatedCard(
-        string[] card,
-        int originalX,
-        int originalY,
-        int width,
-        int height,
-        double progress)
-    {
-        ClearOneCard(originalX, originalY);
-
-        // Center the shrinking card in its original space
-        int drawnWidth = width + 2;
-        int x = originalX + (CardSpace - drawnWidth) / 2;
-        int y = originalY + (CardHeight - height) / 2;
-
-        int contentWidth = Math.Max(0, width - 4);
-
-        string[] maskedCard = new string[card.Length];
-
-        // Gradually replace the text with spaces
-        for (int i = 0; i < card.Length; i++)
-        {
-            string text = card[i];
-
-            int visibleLength = (int)Math.Round(
-                text.Length * (1.0 - progress)
-            );
-
-            visibleLength = Math.Min(
-                text.Length,
-                Math.Max(0, visibleLength)
-            );
-
-            if (visibleLength > contentWidth)
-                visibleLength = contentWidth;
-
-            maskedCard[i] = text.Substring(0, visibleLength);
-        }
-
-        DrawCardAt(maskedCard, x, y, width, height);
-    }
-
-    static void DrawCardAt(
-        string[] card,
-        int x,
-        int y,
-        int width,
-        int height)
-    {
-        if (height <= 0 || width < 1)
-            return;
-
-        int contentWidth = Math.Max(0, width - 4);
-        int renderedWidth = width + 2;
-
-        // At height 1, show just the top edge
-        if (height == 1)
-        {
-            WriteAt(
-                x,
-                y,
-                " ˛" + new string('~', Math.Max(0, width - 2)) + "˛ "
-            );
+            HitBox? hit = frame.Buttons.LastOrDefault(b => input.X >= b.X && input.X < b.X + b.Width && input.Y >= b.Y && input.Y < b.Y + b.Height);
+            if (hit != null) Activate(hit.Action, hit.Index);
             return;
         }
-
-        // Top border
-        WriteAt(
-            x,
-            y,
-            " ˛" + new string('~', Math.Max(0, width - 2)) + "˛ "
-        );
-
-        // Contents and side walls
-        for (int row = 1; row < height - 1; row++)
+        ConsoleKey key = input.Key;
+        if (key == ConsoleKey.NoName) return;
+        if (key == ConsoleKey.Escape) { Back(); return; }
+        int digit = Digit(key);
+        if (Screen == Screen.Main)
         {
-            int cardRow = row - 1;
-            string text = cardRow < card.Length
-                ? card[cardRow]
-                : "";
-
-            if (text.Length > contentWidth)
-                text = text.Substring(0, contentWidth);
-
-            string line = row % 2 == 1
-                ? " ( " + text.PadRight(contentWidth) + " ) "
-                : " ) " + text.PadRight(contentWidth) + " ( ";
-
-            // Keep each line at the current width
-            if (line.Length > renderedWidth)
-                line = line.Substring(0, renderedWidth);
-
-            WriteAt(x, y + row, line.PadRight(renderedWidth));
+            menuIndex = Navigate(key, menuIndex, Menu.Length);
+            if (digit >= 0 && digit < Menu.Length) { menuIndex = digit; Activate("menu", menuIndex); }
+            else if (key == ConsoleKey.Enter) Activate("menu", menuIndex);
+            return;
         }
-
-        // Bottom border
-        WriteAt(
-            x,
-            y + height - 1,
-            " ´" + new string('~', Math.Max(0, width - 2)) + "´ "
-        );
+        if (Screen == Screen.Courses)
+        {
+            courseIndex = GridNavigate(key, courseIndex, courses.Count, 3);
+            if (digit >= 0 && digit < courses.Count) courseIndex = digit;
+            if (key == ConsoleKey.Enter) Activate("course", courseIndex);
+            return;
+        }
+        if (Screen == Screen.Topics)
+        {
+            topicIndex = Navigate(key, topicIndex, 10);
+            if (digit >= 0) topicIndex = digit;
+            if (key == ConsoleKey.Enter) Activate("topic", topicIndex);
+            return;
+        }
+        if (Screen == Screen.Difficulty)
+        {
+            difficultyIndex = Navigate(key, difficultyIndex, 3);
+            if (digit >= 0 && digit < 3) difficultyIndex = digit;
+            if (key == ConsoleKey.Enter) StartRun();
+            return;
+        }
+        if (Screen is Screen.Table or Screen.Events or Screen.Booster)
+        {
+            selected = Navigate(key, selected, 3);
+            if (digit >= 0 && digit < 3) selected = digit;
+            if (key == ConsoleKey.Spacebar) selected = -1;
+            if (key == ConsoleKey.Enter) Activate("play");
+            else if (key == ConsoleKey.R) Activate("reroll");
+            else if (key == ConsoleKey.E) Activate("skip");
+            else if (key == ConsoleKey.S) notice = "The shop opens after clearing the month and choosing a booster.";
+            return;
+        }
+        if (Screen == Screen.Shop)
+        {
+            shopIndex = GridNavigate(key, shopIndex, 6, 3);
+            if (digit >= 0 && digit < 6) shopIndex = digit;
+            if (key == ConsoleKey.Enter) Activate("buy", shopIndex);
+            else if (key == ConsoleKey.S) Activate("shopBack");
+            else if (key == ConsoleKey.N) Activate("next");
+            return;
+        }
+        if (Screen == Screen.Reward)
+        {
+            if (key == ConsoleKey.S) Activate("shop");
+            else if (key is ConsoleKey.N or ConsoleKey.Enter) Activate("next");
+            return;
+        }
+        if (Screen == Screen.Result && key == ConsoleKey.Enter) Activate("continue");
+        else if (Screen == Screen.End)
+        { if (key == ConsoleKey.R) StartRun(); else if (key == ConsoleKey.Enter) ReturnMain(); }
+        else if (Screen == Screen.Pause)
+        { if (key is ConsoleKey.Enter or ConsoleKey.R) Screen = beforePause; else if (key == ConsoleKey.M) ReturnMain(); }
+        else if (Screen == Screen.Settings)
+        {
+            if (digit is >= 0 and < 3) { storage.Preferences.Difficulty = (Difficulty)digit; difficultyIndex = digit; }
+            storage.SaveSettings();
+        }
+        else if (Screen == Screen.Briefing && key == ConsoleKey.Enter)
+        { browsing = false; Screen = Screen.Difficulty; }
     }
-
-    static void ClearCardArea()
+    void Activate(string action, int index = -1)
     {
-        int startX = Math.Max(
-            0,
-            (Console.WindowWidth - CardSpace * 3) / 2
-        );
-
+        switch (action)
+        {
+            case "menu":
+                menuIndex = index;
+                switch (index)
+                {
+                    case 0: browsing = false; Screen = Screen.Courses; break;
+                    case 1: courseIndex = topicIndex = 0; difficultyIndex = (int)Difficulty.Easy; StartRun(); break;
+                    case 2: browsing = true; Screen = Screen.Courses; break;
+                    case 3: Screen = Screen.History; break;
+                    case 4: Screen = Screen.Settings; break;
+                    case 5: Screen = Screen.Guide; break;
+                    case 6: Screen = Screen.Analytics; break;
+                    case 7: Quit = true; break;
+                }
+                break;
+            case "course": courseIndex = index; topicIndex = 0; Screen = Screen.Topics; break;
+            case "topic": topicIndex = index; Screen = browsing ? Screen.Briefing : Screen.Difficulty; break;
+            case "difficulty": difficultyIndex = index; break;
+            case "start": StartRun(); break;
+            case "select": selected = index; break;
+            case "play":
+                if (Game == null || selected < 0) { notice = "Select a card first."; break; }
+                bool played = Game.Phase switch
+                {
+                    Phase.Decisions => Game.Play(selected), Phase.Events => Game.TakeEvent(selected),
+                    Phase.Booster => Game.ClaimBooster(selected), _ => false
+                };
+                if (played) { selected = -1; SyncScreen(); }
+                break;
+            case "reroll":
+                if (Game?.Reroll() == true) selected = -1;
+                else notice = "No rerolls available in this phase.";
+                break;
+            case "skip":
+                if (Game == null) break;
+                if (Game.Phase == Phase.Decisions) Game.FinishDecisions();
+                else if (Game.Phase == Phase.Events) Game.SkipEvents();
+                else if (Game.Phase == Phase.Booster) Game.SkipBooster();
+                selected = -1; SyncScreen(); break;
+            case "continue": Game?.ContinueResult(); SyncScreen(); break;
+            case "buy": Game?.Buy(index); break;
+            case "shopSelect": shopIndex = index; break;
+            case "lockedShop": notice = "The shop opens after clearing the month and choosing a booster."; break;
+            case "shopBack": Screen = Screen.Reward; break;
+            case "shop": if (Game?.Phase == Phase.Shop) Screen = Screen.Shop; break;
+            case "next": if (Game?.NextMonth() == true) { selected = -1; SyncScreen(); } break;
+            case "resume": Screen = beforePause; break;
+            case "main": ReturnMain(); break;
+            case "retry": StartRun(); break;
+            case "back": Back(); break;
+            case "briefingPlay": browsing = false; Screen = Screen.Difficulty; break;
+            case "settingDifficulty": storage.Preferences.Difficulty = (Difficulty)index; difficultyIndex = index; storage.SaveSettings(); break;
+        }
+    }
+    void StartRun()
+    {
+        Game = new Run(courses[courseIndex], topicIndex, (Difficulty)difficultyIndex, Random.Shared.Next());
+        selected = -1; shopIndex = 0; recorded = false; SyncScreen();
+    }
+    void SyncScreen()
+    {
+        if (Game == null) return;
+        Screen = Game.Phase switch { Phase.Decisions => Screen.Table, Phase.Events => Screen.Events,
+            Phase.Result => Screen.Result, Phase.Booster => Screen.Booster, Phase.Shop => Screen.Shop,
+            _ => Screen.End };
+        if (Game.Phase is Phase.Won or Phase.Lost && !recorded)
+        { storage.Record(Game); recorded = true; }
+    }
+    void Back()
+    {
+        switch (Screen)
+        {
+            case Screen.Main: Quit = true; break;
+            case Screen.Courses: ReturnMain(); break;
+            case Screen.Topics: Screen = Screen.Courses; break;
+            case Screen.Difficulty: Screen = Screen.Topics; break;
+            case Screen.Briefing: Screen = Screen.Topics; break;
+            case Screen.Shop: Screen = Screen.Reward; break;
+            case Screen.Pause: Screen = beforePause; break;
+            case Screen.End: ReturnMain(); break;
+            case Screen.Table: case Screen.Events: case Screen.Result: case Screen.Booster: case Screen.Reward:
+                beforePause = Screen; Screen = Screen.Pause; break;
+            default: ReturnMain(); break;
+        }
+    }
+    void ReturnMain() { Game = null; Screen = Screen.Main; notice = ""; }
+    static int Digit(ConsoleKey key) => key is >= ConsoleKey.D1 and <= ConsoleKey.D9 ? key - ConsoleKey.D1
+        : key is >= ConsoleKey.NumPad1 and <= ConsoleKey.NumPad9 ? key - ConsoleKey.NumPad1
+        : key is ConsoleKey.D0 or ConsoleKey.NumPad0 ? 9 : -1;
+    static int Navigate(ConsoleKey key, int value, int count) => key switch
+    {
+        ConsoleKey.LeftArrow or ConsoleKey.UpArrow => Math.Max(0, value - 1),
+        ConsoleKey.RightArrow or ConsoleKey.DownArrow => Math.Min(count - 1, value + 1), _ => value
+    };
+    static int GridNavigate(ConsoleKey key, int value, int count, int columns) => key switch
+    {
+        ConsoleKey.UpArrow => Math.Max(0, value - columns), ConsoleKey.DownArrow => Math.Min(count - 1, value + columns),
+        _ => Navigate(key, value, count)
+    };
+    static void Header(Canvas c, string title, string subtitle = "")
+    {
+        c.Center(1, title, ConsoleColor.Cyan); c.Rule(2);
+        if (subtitle.Length > 0) c.Center(3, subtitle, ConsoleColor.White);
+    }
+    static void Footer(Canvas c, string text) { c.Rule(c.Height - 2); c.Text(3, c.Height - 1, text); }
+    void DrawMain(Canvas c)
+    {
+        c.Center(1, ".------------------------------------------------------.", ConsoleColor.DarkCyan);
+        c.Center(2, "|              B U S I N E S S G A M E                 |", ConsoleColor.Cyan);
+        c.Center(3, "'------------------------------------------------------'", ConsoleColor.DarkCyan);
+        c.Center(5, "THE ECONFORGE EDITION", ConsoleColor.Yellow);
+        c.Center(6, "One company. Twelve months. Every decision counts.");
+        for (int i = 0; i < Menu.Length; i++) c.Button(6, 9 + i * 2, (i + 1) + ". " + Menu[i], "menu", i, i == menuIndex);
+        int x = c.Width - 29;
+        c.Box(x, 10, 22, 11, ConsoleColor.DarkCyan);
+        c.Text(x + 4, 12, "  /\\_/\\", ConsoleColor.Yellow);
+        c.Text(x + 4, 13, "  (o.o)", ConsoleColor.Yellow);
+        c.Text(x + 3, 16, "12 MONTH QUOTAS", ConsoleColor.White);
+        c.Text(x + 3, 18, "60 TOPIC DECKS", ConsoleColor.Cyan);
+        c.Text(x + 3, 19, "3 DIFFICULTY CHIPS", ConsoleColor.Red);
+        Footer(c, "Arrows: Navigate | ENTER: Choose | 1-8 / mouse: Open | ESC: Exit");
+    }
+    void DrawCourses(Canvas c)
+    {
+        Header(c, browsing ? "COURSE LIBRARY" : "SELECT COURSE", "Choose the subject of your company run");
+        int cardWidth = (c.Width - 8) / 3;
+        for (int i = 0; i < courses.Count; i++)
+        {
+            int x = 3 + i % 3 * (cardWidth + 1), y = 6 + i / 3 * 9;
+            ConsoleColor color = i == courseIndex ? ConsoleColor.Yellow : ConsoleColor.DarkCyan;
+            c.Box(x, y, cardWidth, 8, color);
+            c.Wrapped(x + 2, y + 1, $"{i + 1}. {courses[i].Name}", cardWidth - 4, 2, color);
+            c.Text(x + 2, y + 4, "10 topic levels");
+            c.Text(x + 2, y + 5, "12 months per run");
+            c.Buttons.Add(new(x, y, cardWidth, 8, "course", i));
+        }
+        c.Center(25, "Later topics add harder quotas and more responsibilities.");
+        Footer(c, "Arrows / 1-6: Highlight | ENTER / mouse: Open course | ESC: Back");
+    }
+    void DrawTopics(Canvas c)
+    {
+        Course course = courses[courseIndex];
+        Header(c, "SELECT TOPIC / LEVEL", course.Name);
+        for (int i = 0; i < 10; i++)
+        {
+            string tier = i >= 9 ? "EXPERT" : i >= 6 ? "ADVANCED" : i >= 3 ? "INTERMEDIATE" : "FOUNDATION";
+            c.Button(4, 5 + i * 2, $"{(i + 1),2}. {course.Lessons[i].Name}", "topic", i, i == topicIndex);
+            c.Text(c.Width - 17, 5 + i * 2, tier, i >= 6 ? ConsoleColor.Red : ConsoleColor.DarkCyan);
+        }
+        Footer(c, "Arrows / 1-9, 0=10: Highlight | ENTER / mouse: Select | ESC: Courses");
+    }
+    void DrawDifficulty(Canvas c)
+    {
+        Header(c, "CHOOSE YOUR DIFFICULTY CHIP", courses[courseIndex].Name);
+        c.Center(4, $"Level {topicIndex + 1}: {courses[courseIndex].Lessons[topicIndex].Name}", ConsoleColor.Yellow);
+        int gap = (c.Width - 72) / 2;
         for (int i = 0; i < 3; i++)
-            ClearOneCard(startX + i * CardSpace, 0);
+        {
+            int x = gap + i * 24, y = i == difficultyIndex ? 8 : 10;
+            ConsoleColor color = i == difficultyIndex ? ConsoleColor.Yellow : i == 0 ? ConsoleColor.White : i == 1 ? ConsoleColor.Red : ConsoleColor.Blue;
+            c.Text(x + 3, y, "   .--------.", color);
+            c.Text(x + 3, y + 1, "  / //    \\ \\", color);
+            c.Text(x + 3, y + 2, $" |  {((Difficulty)i).ToString().ToUpper(),-7}  |", color);
+            c.Text(x + 3, y + 3, "  \\ \\    // /", color);
+            c.Text(x + 3, y + 4, "   '--------'", color);
+            c.Text(x + 2, y + 6, i == 2 ? "2 decisions/month" : "3 decisions/month");
+            c.Text(x + 2, y + 7, $"{(i == 0 ? 4 : i == 1 ? 3 : 2)} rerolls/month");
+            c.Text(x + 2, y + 8, i == 0 ? "Lower profit quotas" : i == 1 ? "Standard quotas" : "Tighter quotas");
+            c.Buttons.Add(new(x, y, 22, 10, "difficulty", i));
+        }
+        c.Button((c.Width - 19) / 2, 23, "START 12-MONTH RUN", "start", selected: true);
+        Footer(c, "Arrows / 1-3 / mouse: Choose chip | ENTER: Start | ESC: Topics");
     }
-
-    static void ClearOneCard(int x, int y)
+    void DrawTable(Canvas c, bool events)
     {
-        for (int row = 0; row < CardHeight + 2; row++)
-            WriteAt(x, y + row, new string(' ', CardSpace));
+        Run g = Game!; Forecast forecast = g.Preview();
+        Header(c, events ? "EVENT PHASE - TAKE IT OR LEAVE IT" : "DECISION TABLE", $"{g.Course.Name} / {g.Lesson.Name}");
+        c.Text(3, 4, $"MONTH {g.Month}/12   Quotas met: {g.Cleared}/12   {g.Difficulty}", ConsoleColor.Yellow);
+        c.Text(3, 5, $"Decisions left: {g.Actions}   Rerolls: {g.Rerolls}   Projected profit: ${forecast.Profit:N0}");
+        string quotas = string.Join(" | ", g.Quotas().Select(q => $"{q.Name} {(q.AtLeast ? ">=" : "<=")} {Metric(q.Name, q.Target)}"));
+        c.Wrapped(3, 6, "MONTH QUOTAS: " + quotas, c.Width - 6, 2, ConsoleColor.Cyan);
+        for (int i = 0; i < 3; i++)
+        {
+            string name = events ? g.Events[i].Name : g.Hand[i].Name;
+            string[] lines = events ? Wrap(g.Events[i].Description, 19).Take(6).ToArray() : g.Describe(g.Hand[i].Kind);
+            DrawCard(c, i, name, lines, i == selected, events ? ConsoleColor.Magenta : ConsoleColor.Cyan);
+        }
+        DrawStats(c);
+        c.Button(3, 25, $"R {g.Rerolls}", "reroll");
+        c.Button(c.Width - 10, 25, "S", "lockedShop");
+        c.Button(15, 25, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
+        c.Button(15, 26, events ? "ENTER TAKE" : "ENTER PLAY", "play");
+        c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
+        Footer(c, "Arrows/1-3: Select | SPACE: Clear | ENTER: Play | R: Reroll | ESC: Pause");
     }
-
-    static void WriteAt(int x, int y, string text)
+    void DrawCard(Canvas c, int index, string title, string[] lines, bool raised, ConsoleColor color)
     {
-        if (y < 0 || y >= Console.BufferHeight)
-            return;
-
-        x = Math.Max(0, x);
-
-        if (x >= Console.BufferWidth)
-            return;
-
-        int available = Console.BufferWidth - x;
-
-        if (text.Length > available)
-            text = text.Substring(0, available);
-
-        Console.SetCursorPosition(x, y);
-        Console.Write(text);
+        int x = Math.Max(3, (c.Width - 72) / 2) + index * 24;
+        int y = raised ? 8 : 10; // Balatro-style selection lift: exactly two rows.
+        c.Box(x, y, 22, 11, raised ? ConsoleColor.Yellow : color);
+        c.Text(x + 2, y + 1, (index + 1) + ".", ConsoleColor.White);
+        c.Wrapped(x + 2, y + 2, title, 18, 2, raised ? ConsoleColor.Yellow : ConsoleColor.White);
+        for (int row = 0; row < Math.Min(6, lines.Length); row++) c.Text(x + 2, y + 4 + row, lines[row].Length > 18 ? lines[row][..18] : lines[row]);
+        c.Buttons.Add(new(x, y, 22, 11, "select", index));
     }
-
-    // Console mouse input works on Windows; other terminals retain keyboard input.
-    sealed class GameInput : IDisposable
+    void DrawStats(Canvas c)
     {
-        readonly IntPtr handle;
-        readonly uint originalMode;
-        readonly bool mouseEnabled;
-        bool leftDown;
-
-        public GameInput()
-        {
-            if (!OperatingSystem.IsWindows() || Console.IsInputRedirected) return;
-            handle = GetStdHandle(-10);
-            if (!GetConsoleMode(handle, out originalMode)) return;
-            // Enable mouse + extended flags, disable Quick Edit (which steals clicks).
-            mouseEnabled = SetConsoleMode(handle, (originalMode | 0x0010u | 0x0080u) & ~0x0040u);
-        }
-
-        public ConsoleKey ReadKey()
-        {
-            if (!mouseEnabled) return Console.ReadKey(true).Key;
-            while (true)
-            {
-                if (!ReadConsoleInputW(handle, out InputRecord record, 1, out uint count))
-                    return Console.ReadKey(true).Key;
-                if (count == 0) continue;
-                if (record.Type == 1 && record.KeyDown != 0)
-                    return (ConsoleKey)record.VirtualKey;
-                if (record.Type != 2) continue;
-                bool pressed = (record.Buttons & 1) != 0;
-                bool clicked = pressed && !leftDown && record.MouseFlags == 0;
-                leftDown = pressed;
-                if (!clicked) continue;
-                int x = record.MouseX - Console.WindowLeft;
-                int y = record.MouseY - Console.WindowTop;
-                if (Hit(x, y, ShopButtonX(), 15, 5, 3)) return ConsoleKey.S;
-                if (inShop)
-                {
-                    int left = Math.Max(0, (Console.WindowWidth - 72) / 2);
-                    for (int i = 0; i < ShopItems.Length; i++)
-                        if (Hit(x, y, left + i % 3 * 24, 2 + i / 3 * 7, 22, 6))
-                            return (ConsoleKey)((int)ConsoleKey.D1 + i);
-                }
-                else
-                {
-                    int boardLeft = Math.Max(0, (Console.WindowWidth - 54) / 2);
-                    if (Hit(x, y, Math.Max(0, boardLeft - 7), 15, 5, 3)) return ConsoleKey.R;
-                    int startX = Math.Max(0, (Console.WindowWidth - CardSpace * 3) / 2);
-                    for (int i = 0; i < 3; i++)
-                        if (Hit(x, y, startX + i * CardSpace, 0, CardSpace, CardHeight + SelectionLift))
-                            return (ConsoleKey)((int)ConsoleKey.D1 + i);
-                }
-            }
-        }
-
-        static bool Hit(int x, int y, int left, int top, int width, int height)
-            => x >= left && x < left + width && y >= top && y < top + height;
-
-        public void Dispose()
-        {
-            if (mouseEnabled) SetConsoleMode(handle, originalMode);
-        }
-
-        [StructLayout(LayoutKind.Explicit, Size = 20)]
-        struct InputRecord
-        {
-            [FieldOffset(0)] public ushort Type;
-            [FieldOffset(4)] public int KeyDown;
-            [FieldOffset(10)] public ushort VirtualKey;
-            [FieldOffset(4)] public short MouseX;
-            [FieldOffset(6)] public short MouseY;
-            [FieldOffset(8)] public uint Buttons;
-            [FieldOffset(16)] public uint MouseFlags;
-        }
-
-        [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int id);
-        [DllImport("kernel32.dll")] static extern bool GetConsoleMode(IntPtr handle, out uint mode);
-        [DllImport("kernel32.dll")] static extern bool SetConsoleMode(IntPtr handle, uint mode);
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        static extern bool ReadConsoleInputW(IntPtr handle, out InputRecord record, uint length, out uint count);
+        Run g = Game!;
+        c.Rule(21);
+        c.Text(3, 22, $"CASH ${g.Cash:N0}  |  DEBT ${g.Debt:N0}  |  STOCK {g.Inventory}  |  CAPACITY {g.Capacity}");
+        c.Text(3, 23, $"PRICE ${g.Price:F2} | UNIT COST ${g.UnitCost:F2} | SHARE {g.Share:F1}% | QUALITY {g.Quality:F0}");
+        c.Text(3, 24, $"SERVICE {g.Preview().Service:F0}% | RISK {g.Risk:F0} | Upgrades {g.Owned.Count} | Boosters {g.ActiveBoosts.Count}");
     }
-
-    // Your statistics drawing, kept as provided
-    static void DrawStatistics(
-        double cash,
-        double debt,
-        double price,
-        double unitCost,
-        int inventory,
-        double share)
+    void DrawResult(Canvas c)
     {
-        const int baseColumnWidth = 24;
-        const int rowCount = 4;
-
-        int widestWidth = 2 + baseColumnWidth * 2
-                            + (rowCount - 1) * 2;
-
-        Console.WriteLine(
-            new string(
-                ' ',
-                Math.Max(0, (Console.WindowWidth - widestWidth + 8) / 2)
-            ) + new string('_', widestWidth - 8)
-        );
-
-        string[] leftStats =
+        Run g = Game!; MonthReport r = g.LastReport!; bool passed = r.Failures.Count == 0;
+        Header(c, passed ? "MONTH CLEARED" : "QUOTA MISSED", $"Month {r.Month} / 12");
+        c.Center(5, passed ? $"{g.Cleared} OF 12 QUOTAS MET" : "Every quota must be met to continue.", passed ? ConsoleColor.Green : ConsoleColor.Red);
+        c.Text(6, 7, $"Units sold: {r.Sold}     Revenue: ${r.Revenue:N0}     Profit: ${r.Profit:N0}");
+        c.Text(6, 8, $"Cash before reward: ${r.Cash:N0}    Service: {r.Service:F1}%");
+        int y = 11;
+        foreach (Quota quota in g.Quotas())
         {
-            "",
-            $"  CASH: ${cash:N2}",
-            $"   PRICE: ${price:N2}",
-            $"    INVENTORY: {inventory:N0}"
-        };
-
-        string[] rightStats =
-        {
-            "",
-            $"DEBT: ${debt:N2}",
-            $"UNIT COST: ${unitCost:N2}",
-            $"SHARE: {share:N1}%"
-        };
-
-        for (int i = 0; i < rowCount; i++)
-        {
-            int columnWidth = baseColumnWidth + i;
-            int lineWidth = 2 + columnWidth * 2;
-
-            string left = leftStats[i];
-            string right = rightStats[i];
-
-            if (left.Length > columnWidth)
-                left = left.Substring(0, columnWidth);
-
-            if (right.Length > columnWidth)
-                right = right.Substring(0, columnWidth);
-
-            string content =
-                left.PadRight(columnWidth) +
-                right.PadRight(columnWidth);
-
-            Console.Write(
-                new string(
-                    ' ',
-                    Math.Max(0, (Console.WindowWidth - lineWidth) / 2)
-                ) + "/" + content + "\\"
-            );
-
-            Console.WriteLine();
+            double value = quota.Name switch { "Profit" => r.Profit, "Service" => r.Service, "Cash" => r.Cash,
+                "Share" => r.Share, "Debt" => r.Debt, "Quality" => r.Quality, "Risk" => r.Risk, _ => 0 };
+            bool okay = !r.Failures.Contains(quota.Name);
+            c.Text(6, y++, $"[{(okay ? "PASS" : "MISS")}] {quota.Name}: {Metric(quota.Name, value)} / {(quota.AtLeast ? ">=" : "<=")} {Metric(quota.Name, quota.Target)}", okay ? ConsoleColor.Green : ConsoleColor.Red);
         }
+        c.Center(20, passed ? g.Cleared == 12 ? "The twelfth month is cleared. Your company made it!"
+            : "+$200 clear bonus. Next: a free booster and the decoration shop."
+            : "Missed: " + string.Join(", ", r.Failures));
+        c.Button((c.Width - 16) / 2, 23, "ENTER CONTINUE", "continue", selected: true);
+        Footer(c, "ENTER / mouse: Continue | ESC: Pause");
+    }
+    void DrawBooster(Canvas c)
+    {
+        Run g = Game!;
+        Header(c, "MONTHLY BOOSTER PACK", $"Month {g.Month} reward - choose one free booster");
+        c.Center(5, "One choice. Lasting help for the months ahead.", ConsoleColor.Yellow);
+        for (int i = 0; i < 3; i++) DrawCard(c, i, g.Boosters[i].Name, Wrap(g.Boosters[i].Description, 18).ToArray(), selected == i, ConsoleColor.Green);
+        c.Button(5, 24, "ENTER CLAIM + SHOP", "play");
+        c.Button(c.Width - 25, 24, "E SKIP + SHOP", "skip");
+        Footer(c, "Arrows / 1-3 / mouse: Select | ENTER: Claim | E: Skip booster | ESC: Pause");
+    }
+    void DrawShop(Canvas c)
+    {
+        Run g = Game!;
+        Header(c, "OFFICE ODDITIES - DECORATION SHOP", $"Cash ${g.Cash:N0} | Upgrades last for this run");
+        int left = (c.Width - 72) / 2;
+        for (int i = 0; i < 6; i++)
+        {
+            Decoration item = Run.Decorations[i]; int x = left + i % 3 * 24, y = 5 + i / 3 * 7;
+            ConsoleColor color = g.Owned.Contains(i) ? ConsoleColor.DarkGray : i == shopIndex ? ConsoleColor.Yellow : ConsoleColor.White;
+            for (int row = 0; row < 3; row++) c.Text(x + 8, y + row, item.Art[row], color);
+            c.Text(x, y + 3, $"{i + 1}. {item.Name}", color);
+            c.Text(x, y + 4, g.Owned.Contains(i) ? "OWNED" : "$" + item.Cost, color);
+            c.Text(x, y + 5, item.Boost, color);
+            c.Text(x, y + 6, "======================", ConsoleColor.DarkYellow);
+            c.Buttons.Add(new(x, y, 22, 6, "shopSelect", i));
+        }
+        c.Text(left + 2, 20, "  .----.    SHOPKEEPER: A little style goes a long way.", ConsoleColor.White);
+        c.Text(left + 2, 21, "  |o  o|    Choose a decoration, then ENTER to buy.");
+        c.Text(left + 2, 22, " /| -- |\\   New month, same helpful office!");
+        c.Rule(23, ConsoleColor.DarkYellow);
+        c.Button(left, 24, "ENTER BUY", "buy", shopIndex);
+        c.Button(left + 19, 24, "S BACK", "shopBack");
+        c.Button(left + 34, 24, "N NEXT MONTH", "next");
+        c.Text(3, c.Height - 3, g.Message, ConsoleColor.Yellow);
+        Footer(c, "Arrows/1-6: Select | ENTER: Buy | S/ESC: Leave shop | N: Next month");
+    }
+    void DrawReward(Canvas c)
+    {
+        Run g = Game!;
+        Header(c, "BETWEEN MONTHS", $"{g.Cleared}/12 quotas cleared | Cash ${g.Cash:N0}");
+        c.Center(8, g.Message, ConsoleColor.Yellow);
+        c.Center(11, "Your booster choice has been settled for this month.");
+        c.Center(13, "Visit the shop again, or begin the next month.");
+        c.Button((c.Width - 22) / 2, 18, "S DECORATION SHOP", "shop");
+        c.Button((c.Width - 22) / 2, 21, "N NEXT MONTH", "next", selected: true);
+        Footer(c, "S: Shop | N / ENTER: Next month | ESC: Pause");
+    }
+    void DrawEnd(Canvas c)
+    {
+        Run g = Game!; bool won = g.Phase == Phase.Won;
+        Header(c, won ? "YOU WIN - A YEAR WELL RUN" : "RUN OVER", g.Course.Name + " / " + g.Lesson.Name);
+        c.Center(7, won ? "* * *  ALL 12 MONTHLY QUOTAS CLEARED  * * *" : $"{g.Cleared}/12 months cleared", won ? ConsoleColor.Green : ConsoleColor.Red);
+        c.Center(10, $"{g.Difficulty} chip | Total operating profit ${g.Reports.Sum(r => r.Profit):N0}");
+        c.Center(12, $"Cash ${g.Cash:N0} | Decorations {g.Owned.Count} | Boosters {g.ActiveBoosts.Count}");
+        if (!won) c.Center(15, "Missed: " + string.Join(", ", g.LastReport!.Failures));
+        c.Button((c.Width - 23) / 2, 20, "R RETRY SAME TOPIC", "retry");
+        c.Button((c.Width - 23) / 2, 23, "ENTER MAIN MENU", "main", selected: true);
+        Footer(c, "R: Retry | ENTER / ESC: Main menu");
+    }
+    void DrawPause(Canvas c)
+    {
+        Header(c, "RUN PAUSED", "Your company is waiting.");
+        c.Center(10, "Returning to the menu abandons this unfinished run.");
+        c.Center(12, "Completed run results are saved; active runs are not saved.");
+        c.Button((c.Width - 21) / 2, 18, "ENTER RESUME", "resume", selected: true);
+        c.Button((c.Width - 21) / 2, 21, "M ABANDON TO MENU", "main");
+        Footer(c, "ENTER / R / ESC: Resume | M: Abandon to main menu");
+    }
+    void DrawHistory(Canvas c)
+    {
+        Header(c, "PREVIOUS RESULTS", "Completed attempts saved locally");
+        var recent = storage.History.TakeLast(9).Reverse().ToList();
+        if (recent.Count == 0) c.Center(10, "No finished runs yet. Start your first company.");
+        for (int i = 0; i < recent.Count; i++)
+        {
+            RunRecord r = recent[i];
+            c.Text(4, 6 + i * 2, $"{(r.Won ? "WIN " : "LOSS")} {r.Cleared,2}/12 | {r.Difficulty,-6} | {r.Course} / {r.Topic}", r.Won ? ConsoleColor.Green : ConsoleColor.Gray);
+            c.Text(4, 7 + i * 2, $"{r.Finished:yyyy-MM-dd HH:mm} | Profit ${r.Profit:N0}", ConsoleColor.DarkGray);
+        }
+        Footer(c, "ESC: Main menu");
+    }
+    void DrawSettings(Canvas c)
+    {
+        Header(c, "SETTINGS", "Choose your default difficulty");
+        for (int i = 0; i < 3; i++) c.Button(8, 8 + i * 3, $"{i + 1}. {(Difficulty)i}", "settingDifficulty", i, (int)storage.Preferences.Difficulty == i);
+        c.Text(8, 19, "Keyboard and Windows console mouse input are both supported.");
+        c.Text(8, 21, "Settings are saved beside the game in data/settings.json.");
+        Footer(c, "1-3 / mouse: Default difficulty | ESC: Main menu");
+    }
+    void DrawGuide(Canvas c)
+    {
+        Header(c, "LECTURER / LEARNING GUIDE", "A card game about business trade-offs");
+        string[] lines =
+        [
+            "1. Select one of six courses, then one of its ten topic levels.",
+            "2. Choose an Easy, Normal, or Hard chip. Every run lasts 12 months.",
+            "3. Each month, use decisions to change price, ads, stock, costs and risk.",
+            "4. Select a card with arrows, 1-3, or a mouse click. ENTER plays it.",
+            "5. R rerolls even with no selected card. E ends decisions early.",
+            "6. In the event phase, take ONE card, or E to leave all three.",
+            "7. Monthly sales settle automatically. Meet EVERY displayed quota.",
+            "8. After a clear, choose one FREE booster from three random cards.",
+            "9. Shop for persistent decorations. S leaves; N starts the next month.",
+            "10. Meet the twelfth monthly quota to win. One missed month ends the run.",
+            "Profit includes sold-stock costs, ads, overhead, interest and events.",
+            "Stock purchases use cash now; unsold stock remains for later months."
+        ];
+        for (int i = 0; i < lines.Length; i++) c.Text(4, 5 + i * 2, lines[i]);
+        Footer(c, "Later topics add service, cash-buffer and quality quotas. ESC: Main menu");
+    }
+    void DrawAnalytics(Canvas c)
+    {
+        Header(c, "PRODUCT ANALYTICS", "Your local company runs");
+        c.Text(8, 8, $"Finished runs: {storage.History.Count}");
+        c.Text(8, 11, $"Wins: {storage.History.Count(r => r.Won)}");
+        c.Text(8, 14, $"Months cleared: {storage.History.Sum(r => r.Cleared)}");
+        c.Text(8, 17, $"Courses played: {storage.History.Select(r => r.Course).Distinct().Count()} / 6");
+        c.Text(8, 20, $"Topics played: {storage.History.Select(r => (r.Course, r.Topic)).Distinct().Count()} / 60");
+        Footer(c, "ESC: Main menu");
+    }
+    void DrawBriefing(Canvas c)
+    {
+        Lesson lesson = courses[courseIndex].Lessons[topicIndex];
+        Header(c, "COURSE LIBRARY - TOPIC BRIEFING", courses[courseIndex].Name + " / " + lesson.Name);
+        c.Text(4, 5, "THEORY FROM ECONFORGE", ConsoleColor.Yellow);
+        c.Wrapped(4, 7, lesson.Simulation.Theory, c.Width - 8, 5);
+        c.Text(4, 13, "STRATEGY", ConsoleColor.Yellow);
+        c.Wrapped(4, 15, lesson.Simulation.Strategy, c.Width - 8, 4);
+        c.Wrapped(4, 20, "Original decision themes: " + string.Join(", ", lesson.Simulation.Decisions.Select(d => d.Name)), c.Width - 8, 3);
+        c.Button((c.Width - 20) / 2, 24, "ENTER PLAY TOPIC", "briefingPlay");
+        Footer(c, "ENTER: Choose difficulty | ESC: Topics");
+    }
+    static string Metric(string name, double value) => name is "Profit" or "Cash" or "Debt" ? $"${value:N0}"
+        : name is "Share" or "Service" ? $"{value:F1}%" : $"{value:F0}";
+    static IEnumerable<string> Wrap(string text, int width)
+    {
+        string line = "";
+        foreach (string word in text.Split(' '))
+        {
+            if (line.Length + word.Length + 1 > width && line.Length > 0) { yield return line; line = ""; }
+            line += (line.Length == 0 ? "" : " ") + word;
+        }
+        if (line.Length > 0) yield return line;
     }
 }
