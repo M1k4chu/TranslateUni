@@ -44,7 +44,7 @@ public sealed partial class Run
         private set
         {
             double previous = debt; debt = Math.Max(0, value);
-            if (previous > 0 && debt <= 0) NextLoanMonth = Month + 3;
+            if (previous > 0 && debt <= 0) { NextLoanMonth = Month + 3; RefreshDebtCards(); }
         }
     }
     public double Price { get; private set; } = 25;
@@ -133,6 +133,9 @@ public sealed partial class Run
         StartMonth();
     }
 
+    public double BaseOfficeOverhead => 300 + TopicIndex*15;
+    public double OfficeOverhead => Math.Max(0,BaseOfficeOverhead-fixedDiscount-monthOverheadDiscount);
+    public double OfficeOverheadSavings => BaseOfficeOverhead-OfficeOverhead;
     public double ProfitTarget => ProfitTargetFor(Month);
     public double ProfitTargetFor(int month)
     {
@@ -174,7 +177,7 @@ public sealed partial class Run
         int sold = Math.Min(wanted, Math.Min(Inventory, Math.Max(0, (int)(Capacity * capacityShock))));
         double revenue = sold * (effectivePrice + marginBonus);
         double carbon = Lesson.Name == "Externalities" ? 3 : 0;
-        double overhead = Math.Max(60, 300 + TopicIndex * 15 - fixedDiscount - monthOverheadDiscount);
+        double overhead = OfficeOverhead;
         double interest = Debt * extraInterest; // Loan interest is a one-time fee already included in Debt.
         double carryCost = Math.Max(0, Inventory - sold) * (Course.Name == "Logistics" ? 0.35 : 0.08);
         double profit = revenue - sold * (UnitCost * costShock + carbon) - overhead - spending - interest - carryCost + InvestmentIncome;
@@ -208,7 +211,7 @@ public sealed partial class Run
         CardKind.LowerPrice => ["Unit price -$2", "Demand may rise", "No cash cost"],
         CardKind.Restock => [$"Stock +{RestockUnits}", $"Pay ${CardCost(kind):N0}", "Stock carries over"],
         CardKind.Efficiency => ["Spend $250", "Unit cost -$0.60", "Permanent boost"],
-        CardKind.Factory => ["Spend $800", "Capacity +150", "Free stock +100"],
+        CardKind.Factory => ["Spend $800", "Capacity +150", "Stock +100"],
         CardKind.Repay => [$"Pay ${CardCost(kind):N0}", "Debt falls equally", "Loan balance falls"],
         CardKind.Borrow => ["Opens 3 loan offers", "One active loan max", "3-month repayment cooldown"],
         CardKind.SellShares => ["Cash +$500", "Share -1.5%", "No new debt"],
@@ -218,7 +221,7 @@ public sealed partial class Run
         CardKind.Research => ["Spend $180", "Risk -12", "Quality +3"],
         CardKind.Insurance => ["Spend $100", "Block bad events", "This month only"],
         CardKind.Investment => ["Spend $500", "Income +$90/month", "Starts next month"],
-        CardKind.Express => ["Spend $300", "Free stock +60", "Month capacity +20%"],
+        CardKind.Express => ["Spend $300", "Stock +60", "Month capacity +20%"],
         CardKind.BundleDeal => ["Spend $90", "Month demand +12%", "Price -$0.50"],
         CardKind.LoyaltyProgram => ["Spend $160", "Share +0.8%", "Demand +2% forever"],
         CardKind.StaffTraining => ["Spend $250", "Quality +6", "Capacity +30"],
@@ -227,12 +230,12 @@ public sealed partial class Run
         CardKind.QualityAudit => ["Spend $140", "Risk -8", "Quality +5"],
         CardKind.Crowdfunding => ["Cash +$600", "Share -1%", "Equity: no new debt"],
         CardKind.DebtRefinance => ["Spend $200", "Debt -$250", "Risk -4"],
-        CardKind.Warehouse => ["Spend $450", "Capacity +75", "Free stock +80"],
+        CardKind.Warehouse => ["Spend $450", "Capacity +75", "Stock +80"],
         CardKind.ProductRefresh => ["Spend $300", "Quality +4", "Demand +3% forever"],
         CardKind.Automation => ["Spend $900", "Unit cost -$0.90", "Capacity +60"],
         CardKind.Influencer => ["Spend $380", "Ad reach +800", "Risk +4; share +0.4%"],
         CardKind.PremiumLaunch => ["Spend $650", "Price +$2", "Quality +6", "Share +0.6%"],
-        CardKind.EmergencyShipment => ["Spend $450", "Free stock +100", "Immediate delivery"],
+        CardKind.EmergencyShipment => ["Spend $450", "Stock +100", "Immediate delivery"],
         CardKind.ExportContract => ["Spend $200", "Cash/profit +$150", "Month demand +25%"],
         CardKind.BoardRestructure => ["Spend $700", "Debt -$400", "Quality +8; share +1%", "Risk -8"],
         _ => []
@@ -498,7 +501,9 @@ public sealed partial class Run
         if (Cash < item.Cost) { Message = "Not enough cash for " + item.Name; return false; }
         Cash -= item.Cost; Owned.Add(item.Id); ShopTiers[item.Id] = item.Tier;
         ApplyShopUpgrade(item.Id, priorTier, item.Tier);
-        Message = $"Bought {item.Name} (tier {item.Tier}). Total effect: {item.Boost}";
+        Message = ShopUpgrades.Effect(item.Id,item.Tier).OverheadSaving>0
+            ? $"Office overhead now ${OfficeOverhead:N0}/month; saving ${OfficeOverheadSavings:N0}."
+            : $"Bought {item.Name} (tier {item.Tier}). Total effect: {item.Boost}";
         if (item.Tier < MaxShopTier) ShopOffers[index] = ShopUpgrades.Offer(item.Id, item.Tier + 1);
         return true;
     }
@@ -565,9 +570,18 @@ public sealed partial class Run
         LoanOffers.Clear();
         DealHand();
     }
+    void RefreshDebtCards()
+    {
+        if(HasActiveLoan || Phase!=Phase.Decisions) return;
+        for(int i=0;i<Hand.Count;i++) if(Hand[i].Kind==CardKind.Repay)
+        {
+            var eligible=GameContent.Decisions.Where(card=>card.Kind!=CardKind.Repay && Hand.All(other=>other.Kind!=card.Kind)).ToList();
+            Hand[i]=Weighted(eligible,card=>card.Rarity,1)[0];
+        }
+    }
     void DealHand()
     {
-        List<Card> pool = GameContent.Decisions.ToList();
+        List<Card> pool = GameContent.Decisions.Where(card=>card.Kind!=CardKind.Repay || HasActiveLoan).ToList();
         tutorialDeals++;
         CardKind[] lessonHand = tutorialDeals == 1 ? [CardKind.Advertise, CardKind.Restock, CardKind.Sale]
             : tutorialDeals == 2 ? [CardKind.Efficiency, CardKind.Restock, CardKind.CustomerCare]

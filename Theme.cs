@@ -14,7 +14,7 @@ public static class GameTheme
         "debt" or "repay" or "pay" or "fee" or "interest" => ConsoleColor.Red,
         "price" or "unit price" => ConsoleColor.Cyan,
         "stock" or "inventory" or "restock" or "sold" => ConsoleColor.Blue,
-        "cost" or "unit cost" => ConsoleColor.Magenta,
+        "cost" or "unit cost" or "overhead" or "office overhead" => ConsoleColor.Magenta,
         "share" or "market share" => ConsoleColor.Yellow,
         "capacity" or "cap" => ConsoleColor.DarkCyan,
         "quality" => ConsoleColor.DarkGreen,
@@ -27,7 +27,7 @@ public static class GameTheme
         if (!TrueColor) { Console.ForegroundColor = color; return; }
         var rgb = Palette[(int)color]; Console.Write($"\u001b[38;2;{rgb.R};{rgb.G};{rgb.B}m");
     }
-    static readonly Regex Mention = new(@"(?<![a-zA-Z])(unit\s+cost|unit\s+price|market\s+share|cash|debt|price|inventory|restock|stock|cost|share|capacity|quality|risk|service|profit|revenue|income|sales|sold|spend|repay|pay|borrowed|fee|interest)(?![a-zA-Z])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex Mention = new(@"(?<![a-zA-Z])(office\s+overhead|overhead|unit\s+cost|unit\s+price|market\s+share|cash|debt|price|inventory|restock|stock|cost|share|capacity|quality|risk|service|profit|revenue|income|sales|sold|spend|repay|pay|borrowed|fee|interest)(?![a-zA-Z])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     static readonly Regex Value = new(@"^\s*(?:before reward\s*)?(?::|>=|<=)?\s*[+-]?\s*\$?\s*[+-]?\d[\d,.]*(?:[kKmM%])?", RegexOptions.Compiled);
     public static void ColorStatistics(Canvas canvas)
     {

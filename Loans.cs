@@ -111,7 +111,7 @@ public sealed partial class GameApp
             Footer(c,"ESC: Back | Cooldown begins when the last loan is fully repaid");
             return;
         }
-        Header(c, "THE LOAN DESK", g.LoanStatus);
+        Header(c, "CHOOSE A LOAN", g.LoanStatus);
         c.Center(4, "One loan at a time. Repay, then wait three months.", ConsoleColor.Cyan);
         c.Center(5, "Interest is a one-time fee, included in the total debt.");
         c.Center(6, g.Phase == Phase.Result ? $"Bridge funding needed: ${g.BridgeCost:N0}; other quotas still apply." : "Borrowing gives cash, not sales profit.");

@@ -102,7 +102,7 @@ public static class Program
     }
 }
 
-public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, SpecialEvent, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing, Inspect, TutorialIntro, TutorialComplete, Loans }
+public enum Screen { Main, Courses, Topics, Difficulty, Table, Events, Result, SpecialEvent, Booster, Shop, Reward, End, Pause, History, Settings, Guide, Analytics, Briefing, Inspect, TutorialIntro, TutorialComplete, Loans, CourseComparison }
 
 public sealed partial class GameApp
 {
@@ -142,6 +142,7 @@ public sealed partial class GameApp
         {
             case Screen.Main: DrawMain(c); break;
             case Screen.Courses: DrawCourses(c); break;
+            case Screen.CourseComparison: DrawCourseComparison(c); break;
             case Screen.Topics: DrawTopics(c); break;
             case Screen.Difficulty: DrawDifficulty(c); break;
             case Screen.Table: DrawTable(c, false); break;
@@ -163,8 +164,13 @@ public sealed partial class GameApp
             case Screen.TutorialIntro: DrawTutorialIntro(c); break;
             case Screen.TutorialComplete: DrawTutorialComplete(c); break;
         }
-        if (notice.Length > 0) c.Text(3, Game == null ? height - 3 : 33, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
-        else if (storage.Notice.Length > 0) c.Text(3, Game == null ? height - 3 : 33, storage.Notice, ConsoleColor.Yellow);
+        string overlay=notice.Length>0?notice:storage.Notice;
+        if(overlay.Length>0)
+        {
+            int row=Game==null?height-3:33;
+            c.Text(3,row,new string(' ',Math.Max(0,c.Width-6)));
+            c.Wrapped(3,row,overlay,c.Width-6,1,ConsoleColor.Yellow);
+        }
         if (Game == null) { GameTheme.ColorStatistics(c); return c; }
         DrawStats(c); // Persistent desk, shared by every screen in an active run.
 
@@ -232,8 +238,10 @@ public sealed partial class GameApp
             else if (key == ConsoleKey.Enter) Activate("menu", menuIndex);
             return;
         }
+        if (Screen == Screen.CourseComparison) { if(key==ConsoleKey.Enter || key==ConsoleKey.C) Screen=Screen.Courses; return; }
         if (Screen == Screen.Courses)
         {
+            if(key==ConsoleKey.C) { Screen=Screen.CourseComparison; return; }
             courseIndex = GridNavigate(key, courseIndex, courses.Count, 3);
             if (digit >= 0 && digit < courses.Count) courseIndex = digit;
             if (key == ConsoleKey.Enter) Activate("course", courseIndex);
@@ -321,6 +329,8 @@ public sealed partial class GameApp
             case "difficulty": difficultyIndex = index; break;
             case "start": StartRun(); break;
             case "select": selected = index; break;
+            case "courseComparison": Screen=Screen.CourseComparison; break;
+            case "comparisonBack": Screen=Screen.Courses; break;
             case "resultPrev": resultPage--; pendingResultAnimation=true; InputVersion++; break;
             case "resultNext": resultPage++; pendingResultAnimation=true; InputVersion++; break;
             case "loanTake":
@@ -401,6 +411,7 @@ public sealed partial class GameApp
     {
         switch (Screen)
         {
+            case Screen.CourseComparison: Screen=Screen.Courses; break;
             case Screen.Inspect: Screen = beforeInspect; break;
             case Screen.Loans: Screen = beforeLoans; break;
             case Screen.TutorialIntro: case Screen.TutorialComplete: ReturnMain(); break;
@@ -475,6 +486,7 @@ public sealed partial class GameApp
             c.Buttons.Add(new(x, y, cardWidth, 8, "course", i));
         }
         c.Center(25, "Later topics add harder quotas and more responsibilities.");
+        c.Button((c.Width-25)/2,28,"C COMPARE COURSES","courseComparison");
         Footer(c, "WASD / arrows / 1-6: Highlight | ENTER / mouse: Open course | ESC: Back");
     }
     void DrawTopics(Canvas c)
@@ -491,7 +503,7 @@ public sealed partial class GameApp
     }
     void DrawDifficulty(Canvas c)
     {
-        Header(c, "CHOOSE YOUR DIFFICULTY CHIP", courses[courseIndex].Name);
+        Header(c, "CHOOSE YOUR DIFFICULTY", courses[courseIndex].Name);
         c.Center(4, $"Level {topicIndex + 1}: {courses[courseIndex].Lessons[topicIndex].Name}", ConsoleColor.Yellow);
         int gap = (c.Width - 72) / 2;
         for (int i = 0; i < 3; i++)
@@ -533,7 +545,8 @@ public sealed partial class GameApp
         c.Button(3, 29, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
         c.Button(28, 29, events ? "ENTER TAKE" : "ENTER PLAY", "play");
         c.Text(3, 33, g.Message, ConsoleColor.Yellow);
-        Footer(c, "1-3/WASD: Select | ENTER: Play | E: Skip | L: Loans | I: Info | ESC: Pause");
+        Footer(c, events ? "1-3/WASD: Select | ENTER: Take | E: Leave | L: Loans | I: Info | ESC: Pause"
+            : "1-3/WASD: Select | ENTER: Play | E: Skip | L: Loans | I: Info | ESC: Pause");
     }
     void DrawCard(Canvas c, int index, string title, string flavor, string[] lines, Rarity rarity, bool raised, ConsoleColor color)
     {
@@ -615,7 +628,7 @@ public sealed partial class GameApp
         Header(c, won ? "YOU WIN - A YEAR WELL RUN" : g.Endless ? "ENDLESS RUN ENDED" : "RUN OVER", g.Course.Name + " / " + g.Lesson.Name);
         c.Center(7, won ? "* * *  ALL 12 MONTHLY QUOTAS CLEARED  * * *" : g.Endless ? $"Year cleared + {g.Cleared - 12} endless quotas"
             : $"{g.Cleared}/12 months cleared", won ? ConsoleColor.Green : ConsoleColor.Red);
-        c.Center(10, $"{g.Difficulty} chip | Total operating profit ${g.Reports.Sum(r => r.Profit):N0}");
+        c.Center(10, $"{g.Difficulty} | Total operating profit ${g.Reports.Sum(r => r.Profit):N0}");
         c.Center(12, $"Cash ${g.Cash:N0} | Decorations {g.Owned.Count} | Boosters {g.ActiveBoosts.Count}");
         if (!won) c.Center(15, "Missed: " + string.Join(", ", g.LastReport!.Failures));
         if (won && !g.Endless)
@@ -663,7 +676,7 @@ public sealed partial class GameApp
         string[] lines =
         [
             "1. Select one of six courses, then one of its ten topic levels.",
-            "2. Choose an Easy, Normal, or Hard chip. Every run lasts 12 months.",
+            "2. Choose an Easy, Normal, or Hard difficulty. Every run lasts 12 months.",
             "3. Each month, use decisions to change price, ads, stock, costs and risk.",
             "4. WASD / arrows / 1-3 select cards. ENTER plays; I explains.",
             "5. Start with one reroll per month. R replaces cards; E ends decisions.",

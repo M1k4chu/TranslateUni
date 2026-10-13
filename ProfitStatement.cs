@@ -20,8 +20,7 @@ public sealed partial class Run
         add("Supplier / event effect",$"{sold} x ${UnitCost:0.00} x {1-costShock:+0.###;-0.###;0}",sold*UnitCost*(1-costShock),"cost");
         add("Carbon cost",$"{sold} x ${carbon:0.00}",-sold*carbon,"cost");
         double gross=300+TopicIndex*15;
-        add("Office overhead","Monthly fixed cost",-gross,"cost",true);
-        add("Overhead savings","Decorations, boosters, news",gross-overhead,"cost");
+        add("Office overhead",$"Base ${gross:0} - savings ${gross-overhead:0}",-overhead,"cost",true);
         foreach(var group in monthTransactions.GroupBy(entry=>entry.Name)) add(group.Key,"Decisions / event",group.Sum(entry=>entry.Amount));
         double untracked=-spending-monthTransactions.Sum(entry=>entry.Amount);
         add("Other operating spending","",untracked,"cost");

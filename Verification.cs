@@ -22,8 +22,9 @@ public static class Verification
         CheckLoansAndStatistics(courses);
         CheckInputAndTheme(courses);
         CheckStatementsAndMotion(courses);
+        CheckLatestFixes(courses);
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
-        Check(GameContent.Decisions.Length == 32 && Run.BoosterPool.Length == 20, "expanded pools");
+        Check(GameContent.Decisions.Length == 31 && Run.BoosterPool.Length == 20, "expanded pools");
         foreach (Card card in GameContent.Decisions)
         {
             Check(GameContent.Flavor(card.Kind).Split(' ').Length <= 5, "decision explanation word limit");
@@ -41,7 +42,7 @@ public static class Verification
             Check(sample.Rerolls == 1 && sample.Hand.Select(c => c.Kind).Distinct().Count() == 3, "one initial reroll; unique deal");
             foreach (Card card in sample.Hand) { kinds.Add(card.Kind); frequencies[card.Rarity] = frequencies.GetValueOrDefault(card.Rarity) + 1; }
         }
-        Check(kinds.Count == 32, "every decision can appear in real draws");
+        Check(kinds.Count == GameContent.Decisions.Count(card=>card.Kind!=CardKind.Repay), "every eligible decision can appear in real draws");
         Check(frequencies[Rarity.Common] > frequencies[Rarity.Uncommon] && frequencies[Rarity.Uncommon] > frequencies[Rarity.Rare]
             && frequencies[Rarity.Rare] > frequencies[Rarity.Epic] && frequencies[Rarity.Epic] > frequencies[Rarity.Legendary], "rarity weights affect draws");
         var a = new Run(courses[0], 0, Difficulty.Easy, 42);
@@ -405,7 +406,7 @@ public static class Verification
         var cards = new Run(courses[0], 0, Difficulty.Easy, 17); cards.TakeLoan(0);
         set(cards, nameof(Run.Debt), 200.0); cards.Hand[0] = new(CardKind.Repay, "Repay");
         Check(cards.Play(0) && cards.Debt == 0 && cards.NextLoanMonth == cards.Month + 3, "repayment card also starts cooldown");
-        cards.Hand[0] = new(CardKind.Borrow, "Loan Desk"); beforeCash = cards.Cash;
+        cards.Hand[0] = new(CardKind.Borrow, "Removed borrowing action"); beforeCash = cards.Cash;
         Check(!cards.Play(0) && cards.Cash == beforeCash && cards.Debt == 0, "legacy borrowing card cannot bypass loan selection or cooldown");
         var app = new GameApp(courses, new Storage(Path.Combine(Path.GetTempPath(), "TranslateUni-credit-tests-" + Guid.NewGuid().ToString("N"))));
         var normal = new Run(courses[0], 0, Difficulty.Easy, 18);
@@ -507,6 +508,73 @@ public static class Verification
         Check(app.Render(108,42).Lines().Any(line=>line.Contains("PAGE 3/3")),"statement page navigation stays in bounds");
     }
 
+
+    static void CheckLatestFixes(List<Course> courses)
+    {
+        Check(GameContent.Decisions.All(card=>card.Kind!=CardKind.Borrow),"non-working loan desk card is removed from pool");
+        bool sawRepay=false;
+        for(int seed=0;seed<160;seed++)
+        {
+            var run=new Run(courses[0],0,Difficulty.Easy,seed);
+            Check(run.Hand.All(card=>card.Kind!=CardKind.Repay && card.Kind!=CardKind.Borrow),"no debt means no repayment card");
+            run.Reroll(); Check(run.Hand.All(card=>card.Kind!=CardKind.Repay),"reroll also filters inactive repayment cards");
+            run.TakeLoan(0); run.Reroll();
+            typeof(Run).GetProperty(nameof(Run.Rerolls))!.SetValue(run,1); run.Reroll();
+            if(run.Hand.Any(card=>card.Kind==CardKind.Repay)) sawRepay=true;
+            run.Hand[0]=new(CardKind.Repay,"Repay Debt");
+            typeof(Run).GetProperty(nameof(Run.Cash))!.SetValue(run,run.Debt+500);
+            run.RepayLoan(); Check(run.Hand.All(card=>card.Kind!=CardKind.Repay),"full repayment replaces stale repayment cards immediately");
+            foreach(var paid in new[]{CardKind.Factory,CardKind.Warehouse,CardKind.Express,CardKind.EmergencyShipment})
+                Check(run.Describe(paid).All(line=>!line.Contains("free",StringComparison.OrdinalIgnoreCase)),"paid stock cards do not advertise free stock");
+        }
+        Check(sawRepay,"repayment cards remain available when debt is active");
+        var savings=new Run(courses[0],0,Difficulty.Easy,33);
+        typeof(Run).GetProperty(nameof(Run.Phase))!.SetValue(savings,Phase.Shop);
+        typeof(Run).GetProperty(nameof(Run.Cash))!.SetValue(savings,50000.0);
+        foreach(int id in new[]{5,10})
+        for(int tier=1;tier<=3;tier++)
+        {
+            savings.ShopOffers.Clear(); savings.ShopOffers.Add(ShopUpgrades.Offer(id,tier));
+            double before=savings.OfficeOverhead,profit=savings.Preview().Profit;
+            Check(savings.Buy(0),"overhead decoration upgrade purchases succeed");
+            Check(savings.OfficeOverhead<=before && Math.Abs(savings.Preview().Profit-profit-(before-savings.OfficeOverhead))<.011,"each overhead upgrade immediately increases profit by the actual savings");
+            Check(savings.Message.Contains("Office overhead now"),"overhead purchase reports the new monthly charge");
+        }
+        typeof(Run).GetProperty(nameof(Run.Endless))!.SetValue(savings,true);
+        savings.ShopOffers[0]=ShopUpgrades.Offer(5,4); savings.Buy(0);
+        savings.ShopOffers[0]=ShopUpgrades.Offer(5,5); savings.Buy(0);
+        Check(savings.OfficeOverhead==0 && savings.OfficeOverheadSavings==savings.BaseOfficeOverhead,"overhead savings can eliminate the bill instead of stopping at sixty dollars");
+        ProfitLine overhead=savings.Preview().Breakdown!.Lines.Single(line=>line.Name=="Office overhead");
+        Check(overhead.Amount==0 && overhead.Calculation.Contains("savings $300") && Math.Abs(savings.Preview().Breakdown!.Lines.Sum(line=>line.Amount)-savings.Preview().Profit)<.001,"statement shows the net overhead charge without double-counting savings");
+        typeof(Run).GetProperty(nameof(Run.Cleared))!.SetValue(savings,savings.Month);
+        Check(savings.NextMonth() && savings.OfficeOverhead==0,"permanent overhead reduction persists across actual month transition");
+        var coupon=new Run(courses[0],0,Difficulty.Easy,91);
+        double baseProfit=coupon.Preview().Profit;
+        typeof(Run).GetProperty(nameof(Run.Phase))!.SetValue(coupon,Phase.Booster);
+        coupon.Boosters.Add(Run.BoosterPool.Single(card=>card.Id==9));
+        Check(coupon.ClaimBooster(0) && coupon.OfficeOverhead==275 && Math.Abs(coupon.Preview().Profit-baseProfit-coupon.Preview().Sold*.75-25)<.011,"booster overhead savings and per-sale margin apply together");
+        var tax=ClearFirst(courses[0],92);
+        typeof(Run).GetProperty(nameof(Run.CompanyNews))!.SetValue(tax,Run.CompanyEventPool.Single(card=>card.Id==7));
+        tax.AcknowledgeCompanyEvent(); tax.SkipBooster();
+        Check(tax.NextMonth() && tax.OfficeOverhead==220,"tax relief reduces the next month's real overhead charge");
+        tax.FinishDecisions(); tax.SkipEvents(); tax.ContinueResult();
+        typeof(Run).GetProperty(nameof(Run.CompanyNews))!.SetValue(tax,Run.CompanyEventPool[0]);
+        tax.AcknowledgeCompanyEvent(); tax.SkipBooster();
+        Check(tax.NextMonth() && tax.OfficeOverhead==300,"temporary overhead relief expires after exactly one month");
+        var tutorial=new GameApp(courses,new Storage(Path.Combine(Path.GetTempPath(),"TranslateUni-tutorial-text-"+Guid.NewGuid().ToString("N"))));
+        Key(tutorial,ConsoleKey.T); Key(tutorial,ConsoleKey.Enter); Key(tutorial,ConsoleKey.Enter); Key(tutorial,ConsoleKey.D1); Key(tutorial,ConsoleKey.Enter); Key(tutorial,ConsoleKey.R); Key(tutorial,ConsoleKey.E);
+        Key(tutorial,ConsoleKey.Enter); // Wrong action during the guided leave-events step.
+        string line=tutorial.Render(108,42).Lines()[33][..78].Trim();
+        Check(line=="Press E to leave the optional events.","tutorial notice clears old message characters before writing the instruction");
+        var library=new GameApp(courses,new Storage(Path.Combine(Path.GetTempPath(),"TranslateUni-course-comparison-"+Guid.NewGuid().ToString("N"))));
+        Key(library,ConsoleKey.D3); Key(library,ConsoleKey.C);
+        Check(library.Screen==Screen.CourseComparison && library.Render(108,42).Lines().Any(line=>line.Contains("$0.35/unit")),"course library comparison explains actual logistics carrying cost");
+        Check(courses.All(course=>CourseDifferences.For(course.Name).Focus.Contains("Course Focus")) && library.Render(108,42).Lines().Any(line=>line.Contains("carbon cost")),"comparison explains focus effects and special topic mechanics");
+        Key(library,ConsoleKey.Escape); Check(library.Screen==Screen.Courses,"comparison returns to course library");
+        Key(library,ConsoleKey.Enter); Key(library,ConsoleKey.Enter); Key(library,ConsoleKey.Enter);
+        Check(library.Render(108,42).Lines().All(line=>!line.Contains("CHIP",StringComparison.OrdinalIgnoreCase)),"difficulty screens omit the old terminology");
+    }
+
     static Run ClearFirst(Course course, int seed)
     {
         var run = new Run(course, 0, Difficulty.Easy, seed);
@@ -589,7 +657,7 @@ public static class Verification
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.R); Key(app, ConsoleKey.E); capture("04-events"); Key(app, ConsoleKey.E); capture("05-report");
         Key(app, ConsoleKey.Enter); capture("06-company-news"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("07-boosters");
         Key(app, ConsoleKey.Enter); capture("08-shop-and-side-menu"); Key(app, ConsoleKey.D2); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Spacebar); capture("09-tutorial-complete");
-        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.D1); capture("10-course-selection"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); capture("11-difficulty-chips");
+        Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Escape); Key(app, ConsoleKey.D1); capture("10-course-selection"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.Enter); capture("11-difficulty");
         Run year = AutoPlay(courses[0], 0, Difficulty.Easy, 73);
         typeof(GameApp).GetProperty(nameof(GameApp.Game))!.SetValue(app, year);
         typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.End);

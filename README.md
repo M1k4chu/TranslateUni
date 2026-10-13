@@ -1,3 +1,17 @@
+# TranslateUni v5.7
+
+Run StartGame.cmd. In the Course Library, press C or click COMPARE COURSES to see how each course changes focus-card effects, stock costs, topic mechanics and learning themes beyond its quotas.
+
+- Difficulty labels now say difficulty throughout the game and guide.
+- Tutorial instructions clear the old message before drawing, preventing leftover characters. Event controls correctly say Take / Leave.
+- Paid Factory, Warehouse, Express and Emergency Shipment cards now describe their stock as part of the purchase, without calling it free. The paid calendar also no longer advertises free boxes. Genuinely free rewards retain their wording.
+- Repay Debt is eligible only when a loan balance exists. When the balance is cleared, repayment cards already in the decision hand are replaced without spending an action or reroll.
+- The non-working Loan Desk decision card was removed. The established L loan screen remains available for borrowing, repayment and cooldown tracking.
+- Office overhead savings now reduce the actual monthly charge down to $0, replacing the previous $60 minimum. Permanent upgrades, boosters and next-month tax relief stack; temporary relief expires after its month. Results show the net overhead charge and the base-minus-savings calculation without counting the reduction twice. Buying an overhead upgrade reports the new monthly charge.
+
+Validation: Release build without warnings; 7567 checks passed. The full campaign suite covered all 180 course/topic/difficulty combinations; 179 won on their first seed and one required seeded retries. Added checks cover eligible card pools, stale repayment removal, paid-card wording, tutorial text replacement, permanent/temporary/booster overhead reductions, exact profit reconciliation and library navigation. Rendered tutorial and course-comparison screens were visually inspected at 108x42.
+
+---
 # TranslateUni v5.6
 
 Run StartGame.cmd. All previous gameplay, fullscreen, shop, loan and input-queue fixes are included.

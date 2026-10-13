@@ -71,7 +71,7 @@ public static class ShopUpgrades
         if (e.Demand > 0) pieces.Add($"Demand +{e.Demand * 100:0.#}%");
         if (e.UnitCostSaving > 0) pieces.Add($"Unit cost -${e.UnitCostSaving:0.00}");
         if (e.Margin > 0) pieces.Add($"+${e.Margin:0.00}/sale");
-        if (e.OverheadSaving > 0) pieces.Add($"Overhead -${e.OverheadSaving:0}/mo");
+        if (e.OverheadSaving > 0) pieces.Add($"Overhead -${e.OverheadSaving:0}/mo (min $0)");
         if (e.Capacity > 0) pieces.Add($"Capacity +{e.Capacity}");
         if (e.Quality > 0) pieces.Add($"Quality +{e.Quality:0}");
         if (e.StockPerMonth > 0) pieces.Add($"Stock +{e.StockPerMonth}/mo");

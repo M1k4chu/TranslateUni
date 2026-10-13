@@ -170,7 +170,7 @@ public sealed partial class GameApp
     void DrawTutorialIntro(Canvas c)
     {
         Header(c, "TRANSLATEUNI - GUIDED PRACTICE", "Your learning guide in action; about two minutes");
-        c.Wrapped(5, 6, "Pick a course, choose a topic, then select a difficulty chip. Full runs last twelve months. This practice uses Marketing on Easy.", c.Width - 10, 4);
+        c.Wrapped(5, 6, "Pick a course, choose a topic, then select a difficulty. Full runs last twelve months. This practice uses Marketing on Easy.", c.Width - 10, 4);
         c.Wrapped(5, 12, "Your goal: meet every quota on the right. Profit is sales money minus costs. The bars show money, stock and company health. Changes compare with the month start.", c.Width - 10, 4);
         c.Wrapped(5, 18, "Select a card with WASD, 1-3 or arrows. It lifts up two rows. The joke explains the idea; the numbers underneath explain the actual effect.", c.Width - 10, 4);
         c.Wrapped(5, 24, "We will play a decision, reroll, skip an event, clear a quota, read company news, claim boosters, buy an upgrade and begin the next month.", c.Width - 10, 4);
