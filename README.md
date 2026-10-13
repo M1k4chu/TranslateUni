@@ -1,6 +1,6 @@
 # TranslateUni v6.6
 
-Extract this folder and run StartGame.cmd. Windows 10 and 11 are supported; the .NET 8 runtime is required. A compiled build is included in play/. Open TranslateUni.sln to edit the source.
+This repository contains the latest v6.6 source and the chronological history of 21 saved versions. See [HISTORY.md](HISTORY.md) for the tags and [PUBLISH-GITHUB.md](PUBLISH-GITHUB.md) to upload it. Windows 10 and 11 are supported. Install the .NET 8 SDK and run StartGame.cmd, or open TranslateUni.sln in Visual Studio. Compiled builds are excluded from Git; the launcher builds from source when needed.
 
 ## Offline verification and firewall alerts in v6.6
 
@@ -98,6 +98,7 @@ If Windows Terminal is unavailable or its launch fails, the game falls back to a
 Release build: zero warnings/errors. Offline self-test: 7,839 checks. Optional network checks are separately enabled with --network-self-test; prior integration validation covered all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
 
 Internet routing between two physical computers and the Windows 11 GUI path need confirmation on those machines; local socket/TLS tests do not verify a router's port forwarding or a particular Windows 11 installation.
+
 
 
 

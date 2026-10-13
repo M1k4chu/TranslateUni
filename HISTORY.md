@@ -28,3 +28,4 @@ Source, project/solution files, course data, scripts, documentation and the thir
 | v6.3 | 8258085 | TranslateUni v6.3: clearer lobbies and neutral voting |
 | v6.4 | eb970b2 | TranslateUni v6.4: team choice inside the lobby and occupied-port handling |
 | v6.5 | 092f012 | TranslateUni v6.5: hidden addresses and click-to-copy invites |
+| v6.6 | 2af33c1 | TranslateUni v6.6: offline verification and loopback-only optional network tests |
