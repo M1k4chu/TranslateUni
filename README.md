@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # TranslateUni v6.7
 
 This repository contains the latest v6.7 source and the chronological history of 22 saved versions. See [HISTORY.md](HISTORY.md) for the tags and [PUBLISH-GITHUB.md](PUBLISH-GITHUB.md) to upload it. Windows 10 and 11 are supported. Install the .NET 8 SDK and run StartGame.cmd, or open TranslateUni.sln in Visual Studio. Compiled builds are excluded from Git; the launcher builds from source when needed.
