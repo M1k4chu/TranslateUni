@@ -14,7 +14,7 @@ public static class PlayerAvatars
 }
 public sealed record VoteChoice(string Action,int Index=-1)
 {
-    public string Label=>Action switch {"play"=>$"Card {Index+1}","buy"=>$"Buy {Index+1}","loanTake"=>$"Loan {Index+1}","skip"=>"Skip",_=>Action};
+    public string Label=>Action switch {"play"=>$"Card {Index+1}","buy"=>$"Buy {Index+1}","loanTake"=>$"Loan {Index+1}","loans"=>"Open loans","loanBack"=>"Leave loans","loanRepay"=>"Repay loan","shopReroll"=>"Refresh shop","next"=>"Next month","continue" or "companyContinue"=>"Continue","skip"=>"Skip",_=>Action};
 }
 public sealed class TeamBallot
 {
@@ -55,8 +55,9 @@ public sealed class LanMember(int id,PlayerIdentity identity,int team,GameApp vi
 public sealed class LanTeam(Run run)
 {
     public Run Run {get;}=run; public TeamBallot Ballot {get;}=new(); public bool ShopReady,EndlessReady;
+    public IReadOnlyDictionary<int,VoteChoice> ReadyVotes {get;set;}=new Dictionary<int,VoteChoice>();
 }
-public sealed class LanMatch
+public sealed partial class LanMatch
 {
     public PlayMode Mode {get;} public int[] Slots {get;} public List<LanMember> Members {get;}=[];
     public List<LanTeam> Teams {get;}=[]; public bool Started {get;private set;}
@@ -93,7 +94,7 @@ public sealed class LanMatch
         if(input.Key is ConsoleKey.F7 or ConsoleKey.F8){member.ScorePage=Math.Max(0,member.ScorePage+(input.Key==ConsoleKey.F8?1:-1));return;}
         var team=Teams[member.Team];Run run=team.Run;
         member.View.LanSelection(member.Card,member.Shop);
-        Canvas frame=member.View.RenderCoreForLan(Math.Min(140,Math.Max(108,member.Width-32)),Math.Min(46,member.Height));
+        Canvas frame=VotingCore(member,Math.Min(140,Math.Max(108,member.Width-32)),Math.Min(46,member.Height));
         VoteChoice? choice=null;
         if(input.X>=0)
         {
@@ -107,19 +108,21 @@ public sealed class LanMatch
             int digit=input.Key is >=ConsoleKey.D1 and <=ConsoleKey.D9?input.Key-ConsoleKey.D1:-1;
             if(member.View.Screen is Screen.Table or Screen.Events or Screen.Booster or Screen.Loans)
             {
-                if(digit is >=0 and <3)member.Card=digit;
-                else if(input.Key is ConsoleKey.A or ConsoleKey.W or ConsoleKey.LeftArrow or ConsoleKey.UpArrow)member.Card=Math.Max(0,member.Card-1);
-                else if(input.Key is ConsoleKey.D or ConsoleKey.S or ConsoleKey.RightArrow or ConsoleKey.DownArrow)member.Card=Math.Min(2,member.Card+1);
+                int[] allowed=CardChoices(member);
+                if(digit is >=0 and <3&&allowed.Contains(digit))member.Card=digit;
+                else if(input.Key is ConsoleKey.A or ConsoleKey.W or ConsoleKey.LeftArrow or ConsoleKey.UpArrow)member.Card=NavigateChoices(member.Card,-1,allowed);
+                else if(input.Key is ConsoleKey.D or ConsoleKey.S or ConsoleKey.RightArrow or ConsoleKey.DownArrow)member.Card=NavigateChoices(member.Card,1,allowed);
                 if(input.Key==ConsoleKey.Enter)choice=member.View.Screen==Screen.Loans?new(run.HasActiveLoan?"loanRepay":"loanTake",member.Card):new("play",member.Card);
-                if(input.Key==ConsoleKey.E)choice=new("skip");if(input.Key==ConsoleKey.R)choice=new("reroll");
+                if(input.Key==ConsoleKey.E)choice=new(member.View.Screen==Screen.Loans?"loanBack":"skip");if(input.Key==ConsoleKey.R&&member.View.Screen!=Screen.Loans)choice=new("reroll");
             }
             else if(member.View.Screen==Screen.Shop)
             {
-                if(digit is >=0 and <6)member.Shop=digit;
-                else if(input.Key is ConsoleKey.A or ConsoleKey.LeftArrow)member.Shop=Math.Max(0,member.Shop-1);
-                else if(input.Key is ConsoleKey.D or ConsoleKey.RightArrow)member.Shop=Math.Min(5,member.Shop+1);
-                else if(input.Key is ConsoleKey.W or ConsoleKey.UpArrow)member.Shop=Math.Max(0,member.Shop-3);
-                else if(input.Key is ConsoleKey.S or ConsoleKey.DownArrow)member.Shop=Math.Min(5,member.Shop+3);
+                int[] allowed=team.Ballot.TiedChoices?.Where(v=>v.Action=="buy").Select(v=>v.Index).Order().ToArray()??[0,1,2,3,4,5];
+                if(digit is >=0 and <6&&allowed.Contains(digit))member.Shop=digit;
+                else if(input.Key is ConsoleKey.A or ConsoleKey.LeftArrow)member.Shop=NavigateChoices(member.Shop,-1,allowed);
+                else if(input.Key is ConsoleKey.D or ConsoleKey.RightArrow)member.Shop=NavigateChoices(member.Shop,1,allowed);
+                else if(input.Key is ConsoleKey.W or ConsoleKey.UpArrow)member.Shop=team.Ballot.Revote?NavigateChoices(member.Shop,-1,allowed):Math.Max(0,member.Shop-3);
+                else if(input.Key is ConsoleKey.S or ConsoleKey.DownArrow)member.Shop=team.Ballot.Revote?NavigateChoices(member.Shop,1,allowed):Math.Min(5,member.Shop+3);
                 if(input.Key==ConsoleKey.Enter)choice=new("buy",member.Shop);if(input.Key==ConsoleKey.R)choice=new("shopReroll");
             }
             if(input.Key==ConsoleKey.Spacebar && run.Phase==Phase.Shop)choice=new("next");
@@ -128,6 +131,8 @@ public sealed class LanMatch
             if(input.Key==ConsoleKey.Enter && member.View.Screen==Screen.Result)choice=new("continue");
             if(input.Key==ConsoleKey.Enter && member.View.Screen==Screen.SpecialEvent)choice=new("companyContinue");
             if(input.Key==ConsoleKey.P && member.View.Screen==Screen.Loans)choice=new("loanRepay");
+            if(input.Key==ConsoleKey.L&&member.View.Screen!=Screen.Loans)choice=new("loans");
+            if(input.Key==ConsoleKey.Escape&&member.View.Screen==Screen.Loans)choice=new("loanBack");
             if(member.View.Screen==Screen.End&&run.Phase==Phase.Won&&!run.Endless&&input.Key==ConsoleKey.E)choice=new("endless");
             if(member.View.Screen==Screen.End&&input.Key==ConsoleKey.Spacebar)choice=new("skip");
             if(member.View.Screen==Screen.End && (input.Key is ConsoleKey.Enter or ConsoleKey.R or ConsoleKey.Escape || input.Key==ConsoleKey.E&&choice==null)){member.Notice="Q: Leave the match. Start a new lobby for a rematch.";return;}
@@ -140,7 +145,7 @@ public sealed class LanMatch
         }
         if(choice!=null)
         {
-            var changing=new HashSet<string>{"play","skip","reroll","buy","shopReroll","next","continue","companyContinue","loanTake","loanRepay","endless"};
+            var changing=VotingActions;
             if(choice.Action is "main" or "retry" || choice.Action=="back"&&member.View.Screen==Screen.End)member.Notice="Q: Leave the match. Start a new lobby for a rematch.";
             else if(choice.Action=="endless"&&(run.Phase!=Phase.Won||run.Endless||Teams.Any(t=>t.Run.Phase is not (Phase.Won or Phase.Lost))))member.Notice="Endless opens when every company finishes its year.";
             else if(!changing.Contains(choice.Action)) member.View.LanAction(choice.Action,choice.Index);
@@ -149,23 +154,30 @@ public sealed class LanMatch
             {
                 if(choice.Action is "play" or "loanTake" && choice.Index<0)choice=choice with {Index=member.Card};
                 if(choice.Action=="buy"&&choice.Index<0)choice=choice with {Index=member.Shop};
-                if(choice.Action is "play" or "loanTake" && choice.Index<0)member.Notice="Select a card before voting.";
+                if(choice.Action=="loanRepay"&&!run.HasActiveLoan||choice.Action=="loanTake"&&!run.CanBorrow)member.Notice=run.LoanStatus;
+                else if(choice.Action is "play" or "loanTake" && choice.Index<0)member.Notice="Select a card before voting.";
                 else if(Members.Count(m=>m.Team==member.Team&&m.Connected)>1)
                 {
                     if(!team.Ballot.Cast(id,choice,now))member.Notice="Revote only on the tied choices.";
                     else member.Notice=$"Voted: {choice.Label}";
                 }
-                else Apply(member,choice,now);
+                else Apply(member,choice,now,previousVotes:new Dictionary<int,VoteChoice>{{member.Id,choice}});
             }
         }
         Tick(now);
     }
-    void Apply(LanMember member,VoteChoice choice,DateTimeOffset now)
+    void Apply(LanMember member,VoteChoice choice,DateTimeOffset now,IEnumerable<VoteChoice>? previousChoices=null,IReadOnlyDictionary<int,VoteChoice>? previousVotes=null)
     {
         var team=Teams[member.Team];var run=team.Run;
+        if(choice.Action is "loans" or "loanBack")
+        {
+            foreach(var voter in Members.Where(m=>m.Team==member.Team&&m.Connected)){voter.View.LanChoices(null);voter.View.LanAction(choice.Action,-1);voter.Card=choice.Action=="loans"?0:-1;voter.Notice="";}
+            team.Ballot.Clear();Revision++;return;
+        }
         StatSnapshot before=run.CaptureStats();Phase previous=run.Phase;
         if(choice.Action=="loanTake")foreach(var voter in Members.Where(m=>m.Team==member.Team)){if(voter.View.Screen!=Screen.Loans)voter.View.LanAction("loans",-1);voter.View.LanSelection(choice.Index,voter.Shop);}
-        var sources=Members.Where(m=>m.Team==member.Team).ToDictionary(m=>m.Id,m=>m.View.RenderCoreForLan(Math.Min(140,m.Width-32),Math.Min(46,m.Height)));
+        var sources=Members.Where(m=>m.Team==member.Team).ToDictionary(m=>m.Id,m=>VotingCore(m,Math.Min(140,m.Width-32),Math.Min(46,m.Height),previousChoices));
+        foreach(var voter in Members.Where(m=>m.Team==member.Team))VoteMarkers(sources[voter.Id],voter,previousVotes,sources[voter.Id].Width-30);
         if(choice.Action=="endless")team.EndlessReady=true;
         else if(choice.Action=="next") { if(run.Phase==Phase.Shop)team.ShopReady=true; }
         else { if(choice.Action=="loanTake"&&member.View.Screen!=Screen.Loans)member.View.LanAction("loans",-1); member.View.LanSelection(choice.Index>=0?choice.Index:member.Card,member.Shop); member.View.LanAction(choice.Action,choice.Index); }
@@ -173,16 +185,18 @@ public sealed class LanMatch
         foreach(var other in Members.Where(m=>m.Team==member.Team))
         {
             other.Card=-1;other.Notice="";
-            if(!ReferenceEquals(other,member))other.View.AttachLanRun(run);
+            other.View.LanChoices(null);
+            if(!ReferenceEquals(other,member)&&choice.Action is not ("loanTake" or "loanRepay"))other.View.AttachLanRun(run);
             other.Animation=animateCards?CardAnimation.Build(sources[other.Id],choice.Action is "play" or "loanTake"?choice.Index:-1):[];
             other.Animation.AddRange(other.View.LanFeedback(before,previous,Math.Min(140,other.Width-32),Math.Min(46,other.Height)));
             other.AnimationStart=now;
         }
         team.Ballot.Clear();Revision++;
+        if(team.ShopReady||team.EndlessReady)team.ReadyVotes=previousVotes??new Dictionary<int,VoteChoice>();
         var winners=Teams.Where(t=>t.Run.Phase==Phase.Won&&!t.Run.Endless&&Members.Any(m=>m.Team==Teams.IndexOf(t)&&m.Connected)).ToArray();
         if(winners.Length>0&&winners.All(t=>t.EndlessReady)&&Teams.All(t=>t.Run.Phase is Phase.Won or Phase.Lost))
         {
-            foreach(var winner in winners){winner.Run.EnterEndless();winner.ShopReady=winner.EndlessReady=false;}
+            foreach(var winner in winners){winner.Run.EnterEndless();winner.ShopReady=winner.EndlessReady=false;winner.ReadyVotes=new Dictionary<int,VoteChoice>();}
             decisionBarrier=false;DecisionDeadline=ShopDeadline=null;Status="Endless rewards and shop";
             foreach(var voter in Members){voter.Card=-1;voter.Notice="";voter.View.AttachLanRun(Teams[voter.Team].Run);voter.Animation.Clear();}
             Revision++;
@@ -197,12 +211,22 @@ public sealed class LanMatch
             var voters=Members.Where(m=>m.Team==Teams.IndexOf(team)&&m.Connected).Select(m=>m.Id).ToArray();
             if(voters.Length==0 && team.Run.Phase is not (Phase.Won or Phase.Lost)){team.Run.ForfeitLan();team.Ballot.Clear();foreach(var member in Members.Where(m=>m.Team==Teams.IndexOf(team))){member.Animation.Clear();member.View.AttachLanRun(team.Run);}Revision++;}
             bool wasRevote=team.Ballot.Revote;
+            var previousChoices=team.Ballot.TiedChoices;
+            var previousVotes=team.Ballot.Deadline!=null?new Dictionary<int,VoteChoice>(team.Ballot.Votes):null;
             var resolution=team.Ballot.Resolve(voters,now);
-            if(!wasRevote && team.Ballot.Revote)Revision++;
+            if(!wasRevote && team.Ballot.Revote)
+            {
+                foreach(var voter in Members.Where(m=>m.Team==Teams.IndexOf(team)))
+                {
+                    voter.Notice="REVOTE: choose a surviving option.";
+                    if(!CardChoices(voter).Contains(voter.Card))voter.Card=-1;
+                }
+                Revision++;
+            }
             if(resolution.Done)
             {
                 var actor=Members.First(m=>m.Team==Teams.IndexOf(team)&&m.Connected);
-                if(resolution.Winner!=null) Apply(actor,resolution.Winner,now);
+                if(resolution.Winner!=null) Apply(actor,resolution.Winner,now,previousChoices,previousVotes);
                 else {team.Run.SkipLanChoice();foreach(var member in Members.Where(m=>m.Team==actor.Team)){member.Card=-1;member.View.AttachLanRun(team.Run);member.Notice="Tied revote: choice skipped.";}Revision++;}
             }
         }
@@ -230,7 +254,7 @@ public sealed class LanMatch
         if(alive.All(t=>t.ShopReady))
         {
             var previousStats=Teams.Select(t=>t.Run.CaptureStats()).ToArray();
-            foreach(var team in alive){team.Run.NextMonth();team.ShopReady=false;}
+            foreach(var team in alive){team.Run.NextMonth();team.ShopReady=false;team.ReadyVotes=new Dictionary<int,VoteChoice>();}
             month++;decisionBarrier=true;DecisionDeadline=now.AddMinutes(3);ShopDeadline=null;Status=$"Month {month}: decisions";
             foreach(var member in Members){member.Card=-1;member.Notice="";member.View.AttachLanRun(Teams[member.Team].Run);member.Animation=member.View.LanFeedback(previousStats[member.Team],Phase.Shop,Math.Min(140,member.Width-32),Math.Min(46,member.Height));member.AnimationStart=now;}Revision++;
         }
@@ -252,7 +276,7 @@ public sealed class LanMatch
         {
             member.View.LanSelection(member.Card,member.Shop);
             Canvas? motion=member.Animated(now);
-            canvas.Paste(motion!=null&&motion.Width==coreWidth&&motion.Height==coreHeight?motion:member.View.RenderCoreForLan(coreWidth,coreHeight),left+32,top);
+            canvas.Paste(motion!=null&&motion.Width==coreWidth&&motion.Height==coreHeight?motion:VotingCore(member,coreWidth,coreHeight),left+32,top);
             var team=Teams[member.Team];
             void message(int row,string value,ConsoleColor color){canvas.Text(left+35,top+row,value[..Math.Min(value.Length,coreWidth-36)],color);}
             if(team.Run.Phase is Phase.Won or Phase.Lost)
@@ -272,7 +296,7 @@ public sealed class LanMatch
                 message(32,canEndless?"E: Vote endless | SPACE: Vote skip | Q: Leave":"Q: Leave | Start a new lobby for a rematch",ConsoleColor.Cyan);
             }
             if(decisionBarrier && team.Run.Phase!=Phase.Decisions || team.ShopReady){message(31,new string(' ',coreWidth-36),ConsoleColor.Gray);message(31,"READY - waiting for the other company",ConsoleColor.Green);}
-            else if(member.Notice.Length>0){message(31,new string(' ',coreWidth-36),ConsoleColor.Gray);message(31,member.Notice,ConsoleColor.Gray);}
+            else if(member.Notice.Length>0){int row=member.View.Screen==Screen.Shop?33:31;message(row,new string(' ',coreWidth-36),ConsoleColor.Gray);message(row,member.Notice,ConsoleColor.Gray);}
         }
         DrawStandings(canvas,left,top,coreHeight,member.ScorePage);
         if(Started)
@@ -287,6 +311,7 @@ public sealed class LanMatch
             }
             else if(Teams[member.Team].Run.Phase is not (Phase.Won or Phase.Lost)&&Members.Count(m=>m.Team==member.Team&&m.Connected)>1)canvas.Text(left+1,top+coreHeight-4,"ENTER: Vote | E: Skip",ConsoleColor.Yellow);
         }
+        if(Started&&member.Animation.Count==0)VoteMarkers(canvas,member,rightEdge:left+32+coreWidth-30);
         return canvas;
     }
     static string Time(TimeSpan time)=>$"{Math.Max(0,(int)time.TotalSeconds)/60:00}:{Math.Max(0,(int)time.TotalSeconds)%60:00}";
@@ -297,9 +322,8 @@ public sealed class LanMatch
         foreach(var member in Members.Skip(page*visible).Take(visible))
         {
             int row=y+4+Members.Skip(page*visible).Take(visible).ToList().IndexOf(member)*7;
-            ConsoleColor[] colors=[ConsoleColor.Cyan,ConsoleColor.Magenta,ConsoleColor.Yellow,ConsoleColor.Green,ConsoleColor.Blue,ConsoleColor.Red,ConsoleColor.White,ConsoleColor.DarkCyan];
-            var color=colors[member.Color%colors.Length];for(int i=0;i<4;i++)c.Text(x+1,row+i,PlayerAvatars.All[member.Identity.Avatar][i],color);
-            c.Text(x+7,row,member.Identity.Name,color);c.Text(x+7,row+1,$"Team {member.Team+1} "+(member.Connected?"":"OFFLINE"));
+            var color=PlayerColors[member.Color];for(int i=0;i<4;i++)c.Text(x+1,row+i,PlayerAvatars.All[member.Identity.Avatar][i],color);
+            c.Text(x+7,row,$"●{member.Color+1} {member.Identity.Name}",color);c.Text(x+7,row+1,$"Team {member.Team+1} "+(member.Connected?"":"OFFLINE"));
             if(Started){var run=Teams[member.Team].Run;void item(int offset,string value,ConsoleColor ink)=>c.Text(x+7,row+offset,value[..Math.Min(24,value.Length)],ink);item(2,run.LastReport==null?"Month profit: --":$"M{run.LastReport.Month}: ${run.LastReport.Profit:N0}",color);item(3,$"Total: ${run.Reports.Sum(r=>r.Profit):N0}",ConsoleColor.Gray);var ballot=Teams[member.Team].Ballot;if(ballot.Votes.TryGetValue(member.Id,out var vote))item(4,vote.Label,color);}
         }
         c.Text(x+1,y+height-2,"F7/F8: Pages | Q: Leave");

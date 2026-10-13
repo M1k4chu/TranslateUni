@@ -77,6 +77,10 @@ public sealed partial class Run
     public MonthReport? LastReport => Reports.LastOrDefault();
     public bool BoosterClaimed { get; private set; }
     readonly Random random;
+    readonly Random eventRandom,newsRandom,outcomeRandom;
+    readonly Queue<CompanyEvent> newsDeck=[];
+    int lastNews=-1;
+    public int Seed {get;}
     double spending, demandShock = 1, costShock = 1, capacityShock = 1, referencePrice = 25;
     double extraInterest, demandBonus, marginBonus, fixedDiscount;
     int extraRerolls, extraActions, stockBonus;
@@ -110,15 +114,15 @@ public sealed partial class Run
 
     public static readonly CompanyEvent[] CompanyEventPool =
     [
-        new("New Competitor", "Someone stole your homework", "Next month: demand -8%. Restock cautiously or improve advertising.", 0),
+        new("New Competitor", "Rival copied your sales pitch", "Next month: demand -8%. Restock cautiously or improve advertising.", 0),
         new("Internet Scandal", "The comments are on fire", "Next month: demand -10%. Quality -6 and risk +5 now. PR Guardian halves these losses.", 1),
         new("Good PR", "The internet likes you today", "Next month: demand +10%. Share +0.5% now.", 2),
         new("New Company Majority", "New boss, extra bossiness", "Cash +$350 now; share -0.5% and risk +3. No new debt.", 3, Rarity.Uncommon),
         new("Supplier Strike", "Boxes took the day off", "Next month: capacity -10%. Existing inventory is safe.", 4),
         new("Venture Investor", "Money arrived wearing a suit", "Cash +$500 now; share -0.3%. Equity investment, no new loan.", 5, Rarity.Uncommon),
-        new("Viral Meme", "Your logo became a meme", "Next month: demand +15%. Quality +2 now.", 6, Rarity.Rare),
+        new("Campaign Goes Viral", "Your campaign caught investor attention", "Next month: demand +15%. Quality +2 now.", 6, Rarity.Rare),
         new("Tax Relief", "The taxman found compassion", "Next month's overhead is $80 lower.", 7, Rarity.Uncommon),
-        new("Local Business Award", "Mom finally understands your job", "Quality +4 and share +0.3% now.", 8),
+        new("Local Business Award", "Clients trust your brand more", "Quality +4 and share +0.3% now.", 8),
         new("Market Boom", "Everybody suddenly wants your stuff", "Next month: demand +12%, unit costs +5%.", 9, Rarity.Uncommon),
         new("Board Audit", "Spreadsheets scared the debt away", "Debt -$100 and risk -5 now.", 10),
         new("Logistics Breakthrough", "Boxes learned to teleport", "Free stock +50 and permanent capacity +25.", 11, Rarity.Rare)
@@ -129,6 +133,7 @@ public sealed partial class Run
         if (topicIndex < 0 || topicIndex >= course.Lessons.Count) throw new ArgumentOutOfRangeException(nameof(topicIndex));
         Course = course; TopicIndex = topicIndex; Lesson = course.Lessons[topicIndex]; Difficulty = difficulty;
         random = new Random(seed);
+        Seed=seed;eventRandom=GameSeeds.Stream(seed,0xE7E17u);newsRandom=GameSeeds.Stream(seed,0xC0A9u);outcomeRandom=GameSeeds.Stream(seed,0x0A7C0u);
         Tutorial = tutorial;
         StartMonth();
     }
@@ -360,7 +365,7 @@ public sealed partial class Run
             case 4: if (!insured) demandShock *= 0.85; spending -= 350; Cash += 350; break;
             case 5: costShock *= 0.9; break;
             case 6:
-                double payout = random.NextDouble() < 0.65 ? 550 : insured ? 0 : -250;
+                double payout = outcomeRandom.NextDouble() < 0.65 ? 550 : insured ? 0 : -250;
                 Cash += payout; spending -= payout; break;
             case 7: Cash += 180; spending -= 180; Quality = Math.Min(100, Quality + 2); break;
             case 8: costShock *= 0.85; demandShock *= 1.05; break;
@@ -399,7 +404,7 @@ public sealed partial class Run
     {
         if (Phase != Phase.Result) return;
         if (LastReport!.Failures.Count > 0) { Phase = Phase.Lost; return; }
-        CompanyNews = Tutorial ? CompanyEventPool[2] : Weighted(CompanyEventPool, e => e.Rarity, 1)[0];
+        CompanyNews = Tutorial ? CompanyEventPool[2] : DrawCompanyNews();
         Phase = Phase.SpecialEvent;
     }
     public bool AcknowledgeCompanyEvent()
@@ -594,7 +599,9 @@ public sealed partial class Run
     int tutorialDeals;
     void DealEvents()
     {
-        var pool = Lesson.Simulation.Events.Select(e => new EventCard(e.Name, e.Description, e)).ToList();
+        var pool = Lesson.Simulation.Events.Select(e => e.Name=="Stable experiment"
+            ? new EventCard("Customer Demand Survey","Customer feedback confirms the forecast. No statistic changes this month.",e)
+            : new EventCard(e.Name,e.Description,e)).ToList();
         pool.AddRange(new EventCard[]
         {
             new("Viral Spotlight", "Demand +20% this month.", Custom: 0),
@@ -607,14 +614,14 @@ public sealed partial class Run
         });
         pool.AddRange(new EventCard[]
         {
-            new("Office Bake Sale", "Cash/profit +$180; quality +2.", Custom: 7),
+            new("Client Appreciation Day", "Cash/profit +$180; quality +2.", Custom: 7),
             new("Bulk Supplier Deal", "Unit cost -15% this month; demand +5%.", Custom: 8, Rarity: Rarity.Uncommon),
-            new("Influencer Oops", "Ad reach +400; risk +6.", Custom: 9, Rarity: Rarity.Uncommon),
+            new("Campaign Backlash", "Ad reach +400; risk +6.", Custom: 9, Rarity: Rarity.Uncommon),
             new("Export Windfall", "Cash/profit +$600; capacity -10% this month.", Custom: 10, Rarity: Rarity.Rare),
-            new("Corporate Jackpot", "Cash/profit +$900 now.", Custom: 11, Rarity: Rarity.Legendary)
+            new("Licensing Windfall", "Cash/profit +$900 now.", Custom: 11, Rarity: Rarity.Legendary)
         });
         Events = Tutorial ? [pool.First(e => e.Custom == 0), pool.First(e => e.Custom == 5), pool.First(e => e.Custom == 6)]
-            : Weighted(pool, e => e.Rarity, 3);
+            : Weighted(pool, e => e.Rarity, 3,eventRandom);
     }
     void TrackBooster(Booster card)
     {
@@ -625,9 +632,20 @@ public sealed partial class Run
     }
     public static double RarityWeight(Rarity rarity) => rarity switch
     { Rarity.Common => 6, Rarity.Uncommon => 3, Rarity.Rare => 1, Rarity.Epic => 0.35, _ => 0.1 };
-    List<T> Weighted<T>(IEnumerable<T> source, Func<T, Rarity> rarity, int count)
-        => source.Select(item => (Item: item, Score: -Math.Log(Math.Max(1e-12, random.NextDouble())) / RarityWeight(rarity(item))))
+    List<T> Weighted<T>(IEnumerable<T> source, Func<T, Rarity> rarity, int count,Random? stream=null)
+        => source.Select(item => (Item: item, Score: -Math.Log(Math.Max(1e-12, (stream??random).NextDouble())) / RarityWeight(rarity(item))))
             .OrderBy(item => item.Score).Take(count).Select(item => item.Item).ToList();
+    CompanyEvent DrawCompanyNews()
+    {
+        if(newsDeck.Count==0)
+        {
+            var cards=CompanyEventPool.ToArray();
+            for(int i=cards.Length-1;i>0;i--){int j=newsRandom.Next(i+1);(cards[i],cards[j])=(cards[j],cards[i]);}
+            if(cards[0].Id==lastNews)(cards[0],cards[1])=(cards[1],cards[0]);
+            foreach(var card in cards)newsDeck.Enqueue(card);
+        }
+        var news=newsDeck.Dequeue();lastNews=news.Id;return news;
+    }
     IEnumerable<T> Shuffled<T>(IEnumerable<T> source)
     {
         var list = source.ToList();

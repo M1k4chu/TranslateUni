@@ -75,9 +75,9 @@ public static class GameContent
         0 => "Everybody suddenly knows your name", 1 => "Fast money, slightly expensive chaos",
         2 => "Free boxes, questionable quality", 3 => "Customers typed nice things today",
         4 => "Quiet sales, loud grant money", 5 => "Supplier found their generous side",
-        6 => "Flip fate, maybe feed wallet", 7 => "Cookies paid part of rent",
+        6 => "Risky deal, uncertain company profit", 7 => "Happy clients, healthier sales",
         8 => "Bulk boxes, smaller price tags", 9 => "Fame arrived without adult supervision",
-        10 => "Foreign wallets found your stuff", 11 => "The spreadsheet won the lottery",
+        10 => "Foreign wallets found your stuff", 11 => "Your patent finally pays rent",
         _ => card.Name switch
         {
             "Demand shift" or "Viral trend" => "Suddenly everybody wants your stuff",
@@ -87,6 +87,7 @@ public static class GameContent
             "Supplier disruption" => "The delivery truck got distracted",
             "Rate hike" => "Debt developed expensive taste",
             "Scope change" => "The project grew extra arms",
+            "Customer Demand Survey" => "Customers checked, forecasts still standing",
             _ => "The economy did a thing"
         }
     };

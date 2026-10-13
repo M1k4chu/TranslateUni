@@ -406,7 +406,7 @@ public sealed partial class GameApp
     void StartRun()
     {
         tutorialStep = -1; boosterScroll = 0;
-        Game = new Run(courses[courseIndex], topicIndex, (Difficulty)difficultyIndex, Random.Shared.Next());
+        Game = new Run(courses[courseIndex], topicIndex, (Difficulty)difficultyIndex, GameSeeds.New());
         selected = -1; shopIndex = 0; recorded = false; SyncScreen();
     }
     void SyncScreen()
@@ -561,7 +561,9 @@ public sealed partial class GameApp
     }
     void DrawCard(Canvas c, int index, string title, string flavor, string[] lines, Rarity rarity, bool raised, ConsoleColor color)
     {
+        if(lanCards!=null&&!lanCards.Contains(index))return;
         int x = Math.Max(3, (c.Width - 72) / 2) + index * 24;
+        if(lanCards!=null){int place=Array.IndexOf(lanCards,index),span=lanCards.Length*22+Math.Max(0,lanCards.Length-1)*2;x=(c.Width-span)/2+place*24;}
         int y = raised ? 10 : 12; // Balatro-style selection lift: exactly two rows.
         c.Box(x, y, 22, 15, raised ? ConsoleColor.Yellow : color);
         c.Wrapped(x + 2, y + 1, (index + 1) + ". " + title, 18, 2, raised ? ConsoleColor.Yellow : ConsoleColor.White);
@@ -597,7 +599,9 @@ public sealed partial class GameApp
         int left = (c.Width - 72) / 2;
         for (int i = 0; i < 6; i++)
         {
+            if(lanShopItems!=null&&!lanShopItems.Contains(i))continue;
             int x=left+i%3*24, y=4+i/3*12;
+            if(lanShopItems!=null){int position=Array.IndexOf(lanShopItems,i),count=Math.Min(3,lanShopItems.Length);x=(c.Width-(count*22+(count-1)*2))/2+position%3*24;y=4+position/3*12;}
             bool selectedItem=i==shopIndex;
             if(i>=g.ShopOffers.Count) { c.Text(x,y+3,"All tiers maxed",ConsoleColor.DarkGray); c.Box(x,y+9,22,3,ConsoleColor.DarkCyan); continue; }
             Decoration item=g.ShopOffers[i]; bool maxed=g.ShopTier(item.Id)>=item.Tier;

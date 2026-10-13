@@ -74,7 +74,8 @@ public static partial class Verification
         var reconnect=Match(PlayMode.Coop,[2]);reconnect.Add(new("Host"),0);var old=reconnect.Add(new("Guest"),0);reconnect.Disconnect(old.Id);reconnect.Add(new("Guest"),0);
         Check(reconnect.Start(now),"disconnected lobby slots can be replaced");
         var loans=Match(PlayMode.Coop,[2]);loans.Add(new("Borrower"),0);loans.Add(new("Partner"),0);loans.Start(now);
-        foreach(int id in new[]{0,1}){loans.Input(id,new(ConsoleKey.L),now);loans.Input(id,new(ConsoleKey.D2),now);loans.Input(id,new(ConsoleKey.Enter),now);}
+        foreach(int id in new[]{0,1})loans.Input(id,new(ConsoleKey.L),now);
+        foreach(int id in new[]{0,1}){loans.Input(id,new(ConsoleKey.D2),now);loans.Input(id,new(ConsoleKey.Enter),now);}
         Check(loans.Teams[0].Run.HasActiveLoan&&loans.Members[0].View.Screen==Screen.Loans,"co-op votes execute exactly one loan and leave repayment visible");
         double balance=loans.Teams[0].Run.Debt;loans.Tick(now.AddSeconds(4));
         foreach(int id in new[]{0,1}){loans.Input(id,new(ConsoleKey.L),now.AddSeconds(4));loans.Input(id,new(ConsoleKey.P),now.AddSeconds(4));}

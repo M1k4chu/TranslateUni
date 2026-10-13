@@ -25,8 +25,19 @@ public static class ShopUpgrades
         if (id is < 0 or >= 20 || tier is < 1 or > 5) throw new ArgumentOutOfRangeException();
         string name = tier == 1 ? Names[id] : tier == 2 ? (id == 19 ? "Comfy Boss Chair" : "Improved " + Names[id])
             : (tier == 3 ? "Gold " : tier == 4 ? "Diamond " : "Cosmic ") + Names[id];
-        double[] priceScale = [0.5, 0.9, 1.6, 3, 6];
-        return new(name, (int)Math.Round(BasePrices[id] * priceScale[tier - 1]), Description(id, tier), Art[id], id, (Rarity)(tier - 1), tier);
+        return new(name, Price(id,tier), Description(id, tier), Art[id], id, (Rarity)(tier - 1), tier);
+    }
+    public static int Price(int id,int tier)
+    {
+        double[] scales=[.5,.9,1.6,3,6];
+        int reference=id switch {9 or 3 or 16=>1,10=>5,18=>0,15=>7,_=>id};
+        // Margin and unit-cost savings both improve baseline profit per sold unit.
+        // Compare the added benefit of this tier, not the cumulative tier label.
+        double metric(ShopEffect e)=>id switch {1 or 9 or 3 or 16=>e.UnitCostSaving+e.Margin,5 or 10=>e.OverheadSaving,0 or 18=>e.Demand,7 or 15=>e.StockPerMonth,_=>0};
+        double cost=BasePrices[reference]*scales[tier-1];
+        if(reference!=id)cost*=(metric(Effect(id,tier))-metric(Effect(id,tier-1)))/(metric(Effect(reference,tier))-metric(Effect(reference,tier-1)));
+        if(id==19&&tier==1)cost=BasePrices[12]*scales[0]*Effect(id,1).Capacity/Effect(12,1).Capacity;
+        return (int)Math.Round(cost,MidpointRounding.AwayFromZero);
     }
     public static ShopEffect Effect(int id, int tier)
     {

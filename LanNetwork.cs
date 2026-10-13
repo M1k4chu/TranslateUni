@@ -85,7 +85,7 @@ public static class LanMultiplayer
     static void Host(List<Course> courses,PlayMode mode,int[] slots,int course,int topic,Difficulty difficulty,PlayerIdentity profile,TerminalInput input,bool online,string address)
     {
         using var room=online?new OnlineRoom(address):null;
-        var match=new LanMatch(courses,mode,slots,course,topic,difficulty,Random.Shared.Next());var local=match.Add(profile,0);
+        var match=new LanMatch(courses,mode,slots,course,topic,difficulty,GameSeeds.New());var local=match.Add(profile,0);
         int port=room?.Invite.Port??Port;
         var listener=new TcpListener(Socket.OSSupportsIPv6?IPAddress.IPv6Any:IPAddress.Any,port);if(Socket.OSSupportsIPv6)listener.Server.DualMode=true;
         listener.Start(8);var peers=new Dictionary<LanPeer,int>();var pending=new Dictionary<TcpClient,Task<LanPeer>>();var accepted=new Dictionary<LanPeer,DateTimeOffset>();DateTimeOffset lastSend=DateTimeOffset.MinValue;

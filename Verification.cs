@@ -24,6 +24,7 @@ public static partial class Verification
         CheckStatementsAndMotion(courses);
         CheckLatestFixes(courses);
         CheckMultiplayer(courses);
+        CheckVotingRefinements(courses);
         CheckOnlineAndFullscreen();
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 31 && Run.BoosterPool.Length == 20, "expanded pools");
