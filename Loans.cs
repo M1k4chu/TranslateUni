@@ -18,7 +18,9 @@ public sealed partial class Run
         ? $"Next loan: month {NextLoanMonth} ({NextLoanMonth - Month}mo)" : "Loan available";
     public List<LoanOffer> LoanOffers { get; } = [];
     public StatSnapshot MonthStartStats { get; private set; } = new(5000,0,25,450,12,18,500,80,25,100);
-    public StatSnapshot CaptureStats() => new(Cash, Debt, Price, Inventory, UnitCost, Share, Capacity, Quality, Risk, Phase is Phase.Decisions or Phase.Events ? Preview().Service : LastReport?.Service ?? Preview().Service);
+    public double EffectiveUnitCost=>UnitCost*costShock;
+    public int EffectiveCapacity=>Math.Max(0,(int)(Capacity*capacityShock));
+    public StatSnapshot CaptureStats() => new(Cash, Debt, Price, Inventory, EffectiveUnitCost, Share, EffectiveCapacity, Quality, Risk, Phase is Phase.Decisions or Phase.Events ? Preview().Service : LastReport?.Service ?? Preview().Service);
     public double BridgeCost => Phase == Phase.Result && LastReport?.Failures.Contains("Profit") == true
         ? Math.Max(0, ProfitTarget - LastReport.Profit) : 0;
     public void PrepareLoans()
@@ -52,8 +54,8 @@ public sealed partial class Run
         {
             bool rescue = LastReport!.Failures.Count > 0;
             Cash -= bridge;
-            Reports[^1] = LastReport with { Cash = Cash, Debt = Debt, Failures = rescue ? [] : LastReport.Failures, BridgeFunding = bridge };
             if (rescue) { Cleared++; Cash += 200; }
+            Reports[^1] = LastReport with { Cash = Cash, Debt = Debt, Failures = rescue ? [] : LastReport.Failures, BridgeFunding = bridge };
         }
         Message = $"Borrowed ${offer.Amount:N0}; fee ${offer.Fee:N0}; repay ${offer.Total:N0}.";
         return true;

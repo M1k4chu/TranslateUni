@@ -1,6 +1,14 @@
-# TranslateUni v6.6
+# TranslateUni v6.7
 
-This repository contains the latest v6.6 source and the chronological history of 21 saved versions. See [HISTORY.md](HISTORY.md) for the tags and [PUBLISH-GITHUB.md](PUBLISH-GITHUB.md) to upload it. Windows 10 and 11 are supported. Install the .NET 8 SDK and run StartGame.cmd, or open TranslateUni.sln in Visual Studio. Compiled builds are excluded from Git; the launcher builds from source when needed.
+Extract this folder and run StartGame.cmd. Windows 10 and 11 are supported; the .NET 8 runtime is required. A compiled build is included in play/. Open TranslateUni.sln to edit the source.
+
+## Monthly accounting, statistics and shop selection in v6.7
+
+Monthly settlement no longer adds sold-unit production costs back into cash. Net profit includes production, overhead, holding costs, operating decisions/events, income and debt charges. Operating expenses or income already applied immediately are reconciled once at settlement. Inventory purchases, capital upgrades, equity funding, loans and repayment remain separate cash movements. The result shows the settlement cash amount and the separate $200 clear reward, and the report cash includes the reward. Loan rescue reports also include their reward.
+
+Statistics retain cents, suppress negative zero and use percentage points (pp) for rate changes: moving from 18% to 19% is +1pp. Monthly change labels stay stable while bars animate; detail panels retain full amounts. Capacity and unit-cost statistics include temporary overtime, supplier and event effects.
+
+Only affordable, unlocked next-tier shop offers can be selected. WASD/arrows and number keys skip unaffordable/maxed offers; those items have no selection hitboxes. Selection is updated after purchases, rerolls and budget changes. If nothing is buyable, the Buy control is replaced with NO BUYABLE ITEMS. Shared multiplayer purchase votes use the same eligibility check.
 
 ## Offline verification and firewall alerts in v6.6
 
@@ -18,7 +26,7 @@ Press F11 or click COPY INVITE to copy the complete online invite while it is hi
 
 Team selection appears only in Rivalry CO-OP, after connecting to the lobby. Both hosts and guests can inspect the rosters and use 1 / 2 or click JOIN TEAM to choose a company. The first player on each team is its captain and can adjust its slots with the lobby +/- buttons (1-4 players, never fewer than the teammates already present). Players may switch to another team with space before the game starts. The host cannot start while a connected player is still choosing a team. CO-OP and two-player Rivalry assign companies automatically.
 
-LAN hosting now accepts an optional port and tries up to ten nearby alternatives if that port is occupied. Share the full IP:port address shown in the lobby so guests connect to the correct server. Online hosting retains its exact invite port; if occupied, join the existing host or use a different port in the public-address field and forward that port. Failed listeners are closed. Everyone must use v6.6: its updated lobby protocol rejects older versions.
+LAN hosting now accepts an optional port and tries up to ten nearby alternatives if that port is occupied. Share the full IP:port address shown in the lobby so guests connect to the correct server. Online hosting retains its exact invite port; if occupied, join the existing host or use a different port in the public-address field and forward that port. Failed listeners are closed. Everyone must use v6.7: its updated lobby protocol rejects older versions.
 
 ## Joining, waiting and neutral voting in v6.3
 
@@ -95,7 +103,7 @@ If Windows Terminal is unavailable or its launch fails, the game falls back to a
 
 ## Validation
 
-Release build: zero warnings/errors. Offline self-test: 7,839 checks. Optional network checks are separately enabled with --network-self-test; prior integration validation covered all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
+Release build: zero warnings/errors. Offline self-test: 7,867 checks. Optional network checks are separately enabled with --network-self-test; prior integration validation covered all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
 
 Internet routing between two physical computers and the Windows 11 GUI path need confirmation on those machines; local socket/TLS tests do not verify a router's port forwarding or a particular Windows 11 installation.
 

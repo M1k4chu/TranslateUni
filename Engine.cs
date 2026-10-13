@@ -21,7 +21,8 @@ public sealed record CompanyEvent(string Name, string Flavor, string Description
 public sealed record Decoration(string Name, int Cost, string Boost, string[] Art, int Id, Rarity Rarity = Rarity.Common, int Tier = 1);
 public sealed record Quota(string Name, double Target, bool AtLeast = true);
 public sealed record MonthReport(int Month, double Revenue, double Profit, int Sold, double Service,
-    double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures, double BridgeFunding = 0, ProfitBreakdown? Breakdown = null);
+    double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures, double BridgeFunding = 0, ProfitBreakdown? Breakdown = null)
+{ public double SettlementCash {get;init;} }
 public sealed record Forecast(int Demand, int Sold, double Revenue, double Profit, double Service)
 { public ProfitBreakdown? Breakdown { get; init; } }
 
@@ -179,7 +180,7 @@ public sealed partial class Run
             * (1 + Math.Log(1 + Advertising / 350) * 0.3 + demandBonus)
             * (0.8 + Share / 90) * demandShock;
         int wanted = Math.Clamp((int)Math.Round(demand), 1, 10000);
-        int sold = Math.Min(wanted, Math.Min(Inventory, Math.Max(0, (int)(Capacity * capacityShock))));
+        int sold = Math.Min(wanted, Math.Min(Inventory, EffectiveCapacity));
         double revenue = sold * (effectivePrice + marginBonus);
         double carbon = Lesson.Name == "Externalities" ? 3 : 0;
         double overhead = OfficeOverhead;
@@ -387,17 +388,18 @@ public sealed partial class Run
     void SettleMonth()
     {
         Forecast f = Preview();
-        // Ad/event expenses have already affected cash. COGS was paid when stock was purchased.
-        double operatingCash = f.Profit + spending + f.Sold * UnitCost;
-        Cash += operatingCash;
+        // Immediate operating payments/income are already booked in cash.
+        // Settle net profit, adding back only those booked transactions to avoid counting them twice.
+        double operatingCash = Math.Round(f.Profit + spending,2);
+        Cash = Math.Round(Cash + operatingCash,2);
         Inventory -= f.Sold;
         // Excessive prices erode customer quality, adding a trade-off on advanced topics.
         Quality = Math.Clamp(Quality - Math.Max(0, Price - 32) * 0.3, 0, 100);
         var failures = Quotas().Where(q => q.AtLeast ? CurrentMetric(q.Name, f) + 0.001 < q.Target
             : CurrentMetric(q.Name, f) - 0.001 > q.Target).Select(q => q.Name).ToList();
         if (Cash < 0) failures.Add("Solvency");
-        Reports.Add(new(Month, f.Revenue, f.Profit, f.Sold, f.Service, Cash, Share, Debt, Quality, Risk, failures, Breakdown: f.Breakdown));
         if (failures.Count == 0) { Cleared++; Cash += 200; }
+        Reports.Add(new(Month, f.Revenue, f.Profit, f.Sold, f.Service, Cash, Share, Debt, Quality, Risk, failures, Breakdown: f.Breakdown){SettlementCash=operatingCash});
         Phase = Phase.Result;
     }
     public void ContinueResult()
@@ -564,6 +566,7 @@ public sealed partial class Run
         monthTransactions.Clear();
         spending = 0; demandShock = nextDemand; costShock = nextCost; capacityShock = nextCapacity;
         monthOverheadDiscount = nextOverheadDiscount;
+        monthBaseUnitCost=UnitCost;
         nextDemand = nextCost = nextCapacity = 1; nextOverheadDiscount = 0;
         referencePrice = 25; extraInterest = 0;
         insured = false; Phase = Phase.Decisions;

@@ -6,6 +6,7 @@ public sealed record ProfitBreakdown(IReadOnlyList<ProfitLine> Lines, double Tot
 public sealed partial class Run
 {
     readonly List<ProfitLine> monthTransactions = [];
+    double monthBaseUnitCost=12;
     void TrackTransaction(string name, double change)
     { if(Math.Abs(change)>.0001) monthTransactions.Add(new(name,"",-change)); }
     ProfitBreakdown BuildBreakdown(int wanted,int sold,double effectivePrice,double carbon,double overhead,double interest,double carryCost,double profit)
@@ -15,8 +16,8 @@ public sealed partial class Run
         { if(always || Math.Abs(amount)>.00001) lines.Add(new(name,formula,Math.Round(amount,2),metric)); }
         add("Sales revenue",$"{sold} x ${effectivePrice:0.00}",sold*effectivePrice,"revenue",true);
         add("Per-sale boosts",$"{sold} x ${marginBonus:0.00}",sold*marginBonus,"profit");
-        add("Production cost",$"{sold} x ${MonthStartStats.Cost:0.00}",-sold*MonthStartStats.Cost,"cost",true);
-        add("Unit cost improvements",$"{sold} x ${MonthStartStats.Cost-UnitCost:0.00}",sold*(MonthStartStats.Cost-UnitCost),"cost");
+        add("Production cost",$"{sold} x ${monthBaseUnitCost:0.00}",-sold*monthBaseUnitCost,"cost",true);
+        add("Unit cost improvements",$"{sold} x ${monthBaseUnitCost-UnitCost:0.00}",sold*(monthBaseUnitCost-UnitCost),"cost");
         add("Supplier / event effect",$"{sold} x ${UnitCost:0.00} x {1-costShock:+0.###;-0.###;0}",sold*UnitCost*(1-costShock),"cost");
         add("Carbon cost",$"{sold} x ${carbon:0.00}",-sold*carbon,"cost");
         double gross=300+TopicIndex*15;
@@ -72,7 +73,7 @@ public sealed partial class GameApp
             c.Text(5,21,$"Profit quota: ${g.ProfitTarget:N2} | {(r.Profit+r.BridgeFunding>=g.ProfitTarget?"MET":"SHORT")} by ${Math.Abs(r.Profit+r.BridgeFunding-g.ProfitTarget):N2}",ConsoleColor.Cyan);
         }
         if(r.BridgeFunding>0) c.Text(4,23,$"Loan bridge ${r.BridgeFunding:N2} covered the gap; actual profit unchanged.",ConsoleColor.Cyan);
-        else c.Text(4,23,passed?"+$200 clear reward (outside operating profit).":"Red costs subtract; green contributions add.",ConsoleColor.Gray);
+        else c.Text(4,23,$"Settlement ${r.SettlementCash:N2}"+(passed?" + $200 reward":"")+" | Earlier operating payments counted once.",ConsoleColor.Gray);
         int y=24;
         foreach(Quota quota in g.Quotas())
         {

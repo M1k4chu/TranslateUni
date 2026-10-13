@@ -38,6 +38,7 @@ public sealed partial class LanMatch
     {
         var tied=previousChoices??Teams[member.Team].Ballot.TiedChoices;
         bool keepVisible=Teams[member.Team].Ballot.KeepChoicesVisible||tied?.Any(v=>v.Action=="noVote")==true;
+        if(member.View.Screen==Screen.Shop)member.Shop=ShopSelection.Normalize(member.Shop,Teams[member.Team].Run.BuyableShopItems(tied?.Where(v=>v.Action=="buy").Select(v=>v.Index)));
         member.View.LanChoices(keepVisible?null:tied);member.View.LanSelection(member.Card,member.Shop);
         Canvas frame=member.View.RenderCoreForLan(width,height);
         if(member.View.Screen==Screen.Shop)frame.Button(3,31,"E SKIP BUY","skip");

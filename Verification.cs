@@ -26,7 +26,7 @@ public static partial class Verification
         CheckLatestFixes(courses);
         CheckMultiplayer(courses,network);
         CheckVotingRefinements(courses);
-        CheckNoVote(courses); CheckNeutralVotes(courses); CheckLobbyTeams(courses,network); CheckSharing();
+        CheckNoVote(courses); CheckNeutralVotes(courses); CheckLobbyTeams(courses,network); CheckSharing(); CheckAccountingAndSelection(courses);
         CheckOnlineAndFullscreen(network);
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 31 && Run.BoosterPool.Length == 20, "expanded pools");
@@ -440,8 +440,8 @@ public static partial class Verification
         normal.ShopOffers.Clear(); normal.ShopOffers.Add(ShopUpgrades.Offer(0,3)); normal.ShopTiers[0] = 3;
         typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.Shop);
         Canvas shop = app.Render(108,42); string[] shopLines = shop.Lines();
-        Check(shopLines[14].Contains("SELECTED") && shop.ColorAt(3,13) == ConsoleColor.Magenta && shopLines[13][3] == '+' && shopLines[15][3] == '+', "selected shop item has a purple selection box");
-        Check(shopLines[8].Contains("MAX TIER") && shop.ColorAt(3,8) == ConsoleColor.Magenta, "selected completed upgrade keeps the selection accent");
+        Check(!shopLines[14].Contains("SELECTED")&&!shop.Buttons.Any(b=>b.Action is "shopSelect" or "buy"),"maxed items cannot be selected or bought");
+        Check(shopLines[8].Contains("MAX TIER") && shop.ColorAt(3,8) == ConsoleColor.Green, "completed upgrade stays visible without the selection accent");
     }
 
 
@@ -674,6 +674,7 @@ public static partial class Verification
         Console.WriteLine("Saved UI previews to " + directory);
     }
 }
+
 
 
 

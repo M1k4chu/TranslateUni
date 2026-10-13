@@ -285,9 +285,10 @@ public sealed partial class GameApp
         }
         if (Screen == Screen.Shop)
         {
-            shopIndex = GridNavigate(key, shopIndex, 6, 3);
-            if (digit >= 0 && digit < 6) shopIndex = digit;
-            if (key == ConsoleKey.Enter) Activate("buy", shopIndex);
+            int[] buyable=Game!.BuyableShopItems(lanShopItems);
+            shopIndex = ShopSelection.Move(shopIndex,key,buyable,lanShopItems!=null);
+            if (buyable.Contains(digit)) shopIndex = digit;
+            if (key == ConsoleKey.Enter&&Game.CanBuy(shopIndex)) Activate("buy", shopIndex);
             else if (key == ConsoleKey.B) Activate("shopBack");
             else if (key == ConsoleKey.Spacebar) Activate("next");
             else if (key == ConsoleKey.R) Activate("shopReroll");
@@ -375,7 +376,7 @@ public sealed partial class GameApp
             case "continue": Game?.ContinueResult(); SyncScreen(); break;
             case "companyContinue": Game?.AcknowledgeCompanyEvent(); SyncScreen(); break;
             case "buy": if(Game?.Buy(index) == true) InputVersion++; break;
-            case "shopSelect": shopIndex = index; break;
+            case "shopSelect": if(Game?.CanBuy(index)==true)shopIndex = index; break;
             case "shopReroll": if (Game?.RerollShop() == true) { shopIndex = 0; InputVersion++; } break;
             case "lockedShop": notice = "The shop opens after clearing the month and choosing a booster."; break;
             case "shopBack": Screen = Screen.Reward; break;
@@ -596,6 +597,7 @@ public sealed partial class GameApp
     {
         Run g = Game!;
         Header(c, "OFFICE ODDITIES - DECORATION SHOP", $"Cash ${g.Cash:N0} | Upgrades last for this run");
+        shopIndex=ShopSelection.Normalize(shopIndex,g.BuyableShopItems(lanShopItems));
         int left = (c.Width - 72) / 2;
         for (int i = 0; i < 6; i++)
         {
@@ -605,7 +607,8 @@ public sealed partial class GameApp
             bool selectedItem=i==shopIndex;
             if(i>=g.ShopOffers.Count) { c.Text(x,y+3,"All tiers maxed",ConsoleColor.DarkGray); c.Box(x,y+9,22,3,ConsoleColor.DarkCyan); continue; }
             Decoration item=g.ShopOffers[i]; bool maxed=g.ShopTier(item.Id)>=item.Tier;
-            ConsoleColor color=selectedItem?ConsoleColor.Magenta:maxed?ConsoleColor.Green:ConsoleColor.Cyan;
+            bool buyable=g.CanBuy(i);
+            ConsoleColor color=selectedItem?ConsoleColor.Magenta:maxed?ConsoleColor.Green:buyable?ConsoleColor.Cyan:ConsoleColor.DarkGray;
             for(int row=0;row<2;row++) c.Text(x+8,y+row,item.Art[row],color);
             c.Wrapped(x,y+2,$"{i+1}. {item.Name}",22,2,color);
             if(maxed) c.Text(x,y+4,$"MAX TIER {item.Tier}",color);
@@ -615,10 +618,12 @@ public sealed partial class GameApp
             c.Box(x,y+9,22,3,selectedItem?ConsoleColor.Magenta:maxed?ConsoleColor.Green:ConsoleColor.DarkCyan);
             if(selectedItem) c.Text(x+5,y+10," SELECTED ",ConsoleColor.Magenta);
             else if(maxed) c.Text(x+7,y+10,"MAXED",ConsoleColor.Green);
-            c.Buttons.Add(new(x,y,22,12,"shopSelect",i));
+            else if(!buyable)c.Text(x+2,y+10,"NOT ENOUGH CASH",ConsoleColor.DarkGray);
+            if(buyable)c.Buttons.Add(new(x,y,22,12,"shopSelect",i));
         }
         c.Text(left+2,28,"[o_o] Shopkeeper: Pick some office magic.",ConsoleColor.Gray);
-        c.Button(left, 29, "ENTER BUY", "buy", shopIndex);
+        if(g.CanBuy(shopIndex))c.Button(left, 29, "ENTER BUY", "buy", shopIndex);
+        else c.Text(left,29,"NO BUYABLE ITEMS",ConsoleColor.DarkGray);
         c.Button(left + 19, 29, "B BACK", "shopBack");
         c.Button(left + 34, 29, "SPACE LEAVE SHOP", "next");
         if (!g.Tutorial) c.Button(c.Width - 16, 28, $"R ${g.ShopRerollCost}", "shopReroll");

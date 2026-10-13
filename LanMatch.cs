@@ -120,13 +120,10 @@ public sealed partial class LanMatch
             }
             else if(member.View.Screen==Screen.Shop)
             {
-                int[] allowed=team.Ballot.TiedChoices?.Where(v=>v.Action=="buy").Select(v=>v.Index).Order().ToArray()??[0,1,2,3,4,5];
+                int[] allowed=run.BuyableShopItems(team.Ballot.TiedChoices?.Where(v=>v.Action=="buy").Select(v=>v.Index));
+                member.Shop=ShopSelection.Move(member.Shop,input.Key,allowed,team.Ballot.Revote);
                 if(digit is >=0 and <6&&allowed.Contains(digit))member.Shop=digit;
-                else if(input.Key is ConsoleKey.A or ConsoleKey.LeftArrow)member.Shop=NavigateChoices(member.Shop,-1,allowed);
-                else if(input.Key is ConsoleKey.D or ConsoleKey.RightArrow)member.Shop=NavigateChoices(member.Shop,1,allowed);
-                else if(input.Key is ConsoleKey.W or ConsoleKey.UpArrow)member.Shop=team.Ballot.Revote?NavigateChoices(member.Shop,-1,allowed):Math.Max(0,member.Shop-3);
-                else if(input.Key is ConsoleKey.S or ConsoleKey.DownArrow)member.Shop=team.Ballot.Revote?NavigateChoices(member.Shop,1,allowed):Math.Min(5,member.Shop+3);
-                if(input.Key==ConsoleKey.Enter)choice=new("buy",member.Shop);if(input.Key==ConsoleKey.R)choice=new("shopReroll");
+                if(input.Key==ConsoleKey.Enter&&run.CanBuy(member.Shop))choice=new("buy",member.Shop);if(input.Key==ConsoleKey.R)choice=new("shopReroll");
             }
             if(input.Key==ConsoleKey.Spacebar && run.Phase==Phase.Shop)choice=new("next");
             if(input.Key==ConsoleKey.E && member.View.Screen is Screen.Shop or Screen.Reward)choice=new("skip");
@@ -166,6 +163,7 @@ public sealed partial class LanMatch
             {
                 if(choice.Action is "play" or "loanTake" && choice.Index<0)choice=choice with {Index=member.Card};
                 if(choice.Action=="buy"&&choice.Index<0)choice=choice with {Index=member.Shop};
+                if(choice.Action=="buy"&&!run.CanBuy(choice.Index)){member.Notice="Choose an affordable upgrade that isn't maxed.";return;}
                 if(choice.Action=="loanRepay"&&!run.HasActiveLoan||choice.Action=="loanTake"&&!run.CanBorrow)member.Notice=run.LoanStatus;
                 else if(choice.Action is "play" or "loanTake" && choice.Index<0)member.Notice="Select a card before voting.";
                 else if(Members.Count(m=>m.Team==member.Team&&m.Connected)>1)
