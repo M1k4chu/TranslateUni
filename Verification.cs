@@ -25,7 +25,7 @@ public static partial class Verification
         CheckLatestFixes(courses);
         CheckMultiplayer(courses);
         CheckVotingRefinements(courses);
-        CheckNoVote(courses);
+        CheckNoVote(courses); CheckNeutralVotes(courses);
         CheckOnlineAndFullscreen();
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 31 && Run.BoosterPool.Length == 20, "expanded pools");
@@ -673,4 +673,5 @@ public static partial class Verification
         Console.WriteLine("Saved UI previews to " + directory);
     }
 }
+
 

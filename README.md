@@ -1,18 +1,19 @@
-# TranslateUni v6.2
+# TranslateUni v6.3
 
 Extract this folder and run StartGame.cmd. Windows 10 and 11 are supported; the .NET 8 runtime is required. A compiled build is included in play/. Open TranslateUni.sln to edit the source.
 
-## No vote and stationary loan cards in v6.2
+## Joining, waiting and neutral voting in v6.3
 
-Press N or click NO VOTE in the left panel to vote against the current proposal. When No vote wins, only the ballot is cleared: the hand, decisions, rerolls, statistics and phase stay unchanged. This works for card choices, loan proposals, shop purchases and the other shared votes. A second tied vote now also cancels only the ballot. E remains the explicit skip/end-phase action.
+Host / Join, LAN / Online and Connect have clickable buttons. Player counts use visible +/- buttons, LEFT / RIGHT to adjust and UP / DOWN to choose a team. Counts include yourself. CO-OP guests simply join the host's shared company; Rivalry CO-OP captains can set their own team's size. The lobby shows team rosters, empty slots, your team, course and difficulty, the exact number of missing players and when guests are waiting for the host to start.
 
-Proposing loans keeps the decision cards visible. Loan revotes keep all three offers in their original positions; an excluded offer is dimmed and cannot receive a revote. An accepted loan updates the statistics without card collapse or suction animations, then shows the existing repayment panel. Individual No votes have the same colored markers as other choices.
+N / NO VOTE opposes the current proposal. V / SKIP VOTE stays neutral: it counts as a submitted response, so everyone can finish voting early, but adds no vote for or against any option. Players can change either response before voting finishes. If everyone stays neutral, only the ballot is cleared; the cards, actions, statistics and phase remain unchanged. E retains its explicit skip/end-phase behavior.
 
+Whenever someone casts No vote, every option remains visible in its original position during that ballot's revote, including cards, loan offers, shop items and action controls. Excluded choices are dimmed and disabled. This is a general rule, even when No is not one of the highest-scoring choices. Without any No votes, revotes retain the centered tied-options layout. An accepted loan still shows repayment without collapse or suction animations.
 ## Voting, shop and events refinements in v6.1
 
 Each player has a colored numbered dot, matching the symbol next to their name. Their badge appears directly on the card, loan offer, booster or shop item they voted for, or beside the corresponding vote button. Up to eight player badges fit on a card; the final vote is also preserved during the selected-card animation. Readiness votes stay visible while waiting for the other company.
 
-A card or shop revote removes excluded choices and voting controls; loan offers stay visible. Two tied cards are centered symmetrically with the same two-column gap as the original three-card layout. A single surviving card is centered as well. Shop ties move the surviving items onto a centered shelf. Original option numbers remain unchanged; keyboard navigation skips hidden options and mouse hitboxes follow the new positions. The revote footer explains the tied options and the always-available No vote.
+A revote without any No votes removes excluded choices and voting controls. Two tied cards are centered symmetrically with the same two-column gap as the original three-card layout. A single surviving card is centered as well. Shop ties move the surviving items onto a centered shelf. Original option numbers remain unchanged; keyboard navigation skips hidden options and mouse hitboxes follow the new positions. The revote footer explains the tied options and the always-available No vote.
 
 Loans are now a shared voting screen: L first proposes opening it. Once accepted, all teammates see the offers. Borrowing, repayment and leaving the panel are separate votes, and an accepted loan leaves everyone looking at the repayment screen. Viewing offers does not borrow money. The existing one-loan limit and three-month repayment cooldown are unchanged.
 
@@ -32,7 +33,7 @@ Multiplayer works between separate computers. Each player runs this version of t
 
 - CO-OP: 2-8 players share one company and vote on decisions, optional events, boosters, shop purchases, rerolls, loans, repayments and advancing to the next month.
 - Rivalry: two players each run an independent company, starting with the same course, topic, difficulty and random seed.
-- Rivalry CO-OP: two competing companies, each controlled by a voting team of 1-4 players. The host sets Team 1's count with F4. The first player joining Team 2 sets that team's count with F4 before joining. Host F5 provides an initial Team 2 count; the joining captain can override it. Teams may have different counts.
+- Rivalry CO-OP: two competing companies, each controlled by a voting team of 1-4 players. The host uses the +/- controls to set both team counts. The first player joining Team 2 can set that team's count before joining, overriding the host's initial count. Teams may have different counts.
 
 The host selects the course (F1), topic (F2) and difficulty (F3). In the lobby, ENTER starts the match after all chosen slots are filled. Player names must be unique. Rivalry guests join Team 2; Rivalry CO-OP guests choose their team with F5. CO-OP guests join the shared team.
 
@@ -56,7 +57,7 @@ There is no central server or relay. The game cannot bypass your router, ISP car
 
 The decision phase lasts at most 3 minutes. A company that finishes early waits for the other company before playing its optional events. When both companies finish, they advance immediately. The shared 2-minute shop clock starts when the first company reaches the shop. Both companies can finish early by choosing SPACE. When the shop clock expires, outstanding event/results/news/booster screens advance with optional choices skipped, and the next month starts for surviving companies.
 
-In a voting team, the first vote starts a 20-second countdown. Players may change their vote during that window. Once all connected teammates vote, the result resolves early. The choice with the most votes wins; abstentions do not count. A tie opens a 10-second revote restricted to the tied choices. A second tie cancels the vote without using a card or advancing the phase. N votes to reject the proposal without changing the game. E votes to skip decisions/events/boosters or reject a shop purchase. Opening loans with L and leaving the loan panel with ESC/E are now team votes, as are borrowing and repayment. SPACE votes to finish shopping. Required result/news screens use ENTER to continue.
+In a voting team, the first vote starts a 20-second countdown. Players may change their vote during that window. Once all connected teammates vote, the result resolves early. The choice with the most votes wins; abstentions do not count. A tie opens a 10-second revote restricted to the tied choices. A second tie cancels the vote without using a card or advancing the phase. N votes to reject the proposal without changing the game. V submits a neutral response that does not influence the winning choice. E votes to skip decisions/events/boosters or reject a shop purchase. Opening loans with L and leaving the loan panel with ESC/E are now team votes, as are borrowing and repayment. SPACE votes to finish shopping. Required result/news screens use ENTER to continue.
 
 Each player's assigned color, avatar, current vote, last settled month's profit and total operating profit appear on the left. CO-OP teammates display their shared company's profit. F7/F8 page through longer player lists. Quotas, booster cards and the statistics board stay on the right/bottom. Timers appear below the left player list so shop prices and card animations stay clear.
 
@@ -76,9 +77,10 @@ If Windows Terminal is unavailable or its launch fails, the game falls back to a
 
 ## Validation
 
-Release build: zero warnings/errors. Self-test: 7,781 checks, including all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
+Release build: zero warnings/errors. Self-test: 7,798 checks, including all 180 course/topic/difficulty campaigns, real LAN TCP packets, real encrypted online host/client streams, wrong server-fingerprint rejection, invitation secrets and endpoint parsing, vote/revote timers, team-size choices, shop/decision barriers, loans, mouse voting, stale-input guards, disconnects and shared endless progression. Fullscreen and queued-input/palette tests passed on this Windows 10 machine. Rendered multiplayer screens were visually inspected at 140 x 42 and 172 x 46.
 
 Internet routing between two physical computers and the Windows 11 GUI path need confirmation on those machines; local socket/TLS tests do not verify a router's port forwarding or a particular Windows 11 installation.
+
 
 
 

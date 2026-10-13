@@ -6,17 +6,18 @@ public sealed partial class GameApp
     public void LanChoices(IEnumerable<VoteChoice>? choices)
     {
         var options=choices?.ToArray();
-        lanCards=Screen==Screen.Loans||options?.Any(v=>v.Action=="loans")==true?null:options?.Where(v=>v.Action=="play").Select(v=>v.Index).Where(i=>i>=0).Distinct().Order().ToArray();
-        lanShopItems=options?.Where(v=>v.Action=="buy").Select(v=>v.Index).Distinct().Order().ToArray();
+        lanCards=options?.Any(v=>v.Action=="noVote")==true?null:options?.Where(v=>v.Action==(Screen==Screen.Loans?"loanTake":"play")).Select(v=>v.Index).Where(i=>i>=0).Distinct().Order().ToArray();
+        lanShopItems=options?.Any(v=>v.Action=="noVote")==true?null:options?.Where(v=>v.Action=="buy").Select(v=>v.Index).Distinct().Order().ToArray();
     }
 }
 
 public sealed partial class LanMatch
 {
     public static readonly ConsoleColor[] PlayerColors=[ConsoleColor.Cyan,ConsoleColor.Magenta,ConsoleColor.Yellow,ConsoleColor.Green,ConsoleColor.Blue,ConsoleColor.Red,ConsoleColor.White,ConsoleColor.DarkCyan];
-    static readonly HashSet<string> VotingActions=["noVote","play","skip","reroll","buy","shopReroll","next","continue","companyContinue","loans","loanBack","loanTake","loanRepay","endless"];
+    static readonly HashSet<string> VotingActions=["noVote","abstain","play","skip","reroll","buy","shopReroll","next","continue","companyContinue","loans","loanBack","loanTake","loanRepay","endless"];
     static bool LoanProposal(LanTeam team)=>team.Ballot.Votes.Values.Any(v=>v.Action=="loans")||team.Ballot.TiedChoices?.Any(v=>v.Action=="loans")==true;
-    static HitBox NoVoteButton(int width,int height)=>new(Math.Max(0,(width-Math.Min(172,width))/2)+1,(height-Math.Min(46,height))/2+Math.Min(46,height)-3,13,1,"noVote");
+    static HitBox NoVoteButton(int width,int height)=>new(Math.Max(0,(width-Math.Min(172,width))/2)+1,(height-Math.Min(46,height))/2+Math.Min(46,height)-4,13,1,"noVote");
+    static HitBox[] BallotButtons(int width,int height)=>[NoVoteButton(width,height),NoVoteButton(width,height) with {Y=NoVoteButton(width,height).Y+1,Width=15,Action="abstain"}];
     void CancelVote(LanTeam team,string message)
     {
         team.Ballot.Clear();
@@ -36,21 +37,22 @@ public sealed partial class LanMatch
     Canvas VotingCore(LanMember member,int width,int height,IEnumerable<VoteChoice>? previousChoices=null)
     {
         var tied=previousChoices??Teams[member.Team].Ballot.TiedChoices;
-        member.View.LanChoices(tied);member.View.LanSelection(member.Card,member.Shop);
+        bool keepVisible=Teams[member.Team].Ballot.KeepChoicesVisible||tied?.Any(v=>v.Action=="noVote")==true;
+        member.View.LanChoices(keepVisible?null:tied);member.View.LanSelection(member.Card,member.Shop);
         Canvas frame=member.View.RenderCoreForLan(width,height);
         if(member.View.Screen==Screen.Shop)frame.Button(3,31,"E SKIP BUY","skip");
         if(tied!=null)
         {
             foreach(var button in frame.Buttons.Where(b=>VotingActions.Contains(b.Action)&&!tied.Any(v=>v.Action==b.Action)).ToArray())
-            {frame.Text(button.X,button.Y,new string(' ',button.Width));frame.Buttons.Remove(button);}
+            {if(keepVisible)frame.Recolor(button.X,button.Y,button.Width,ConsoleColor.DarkGray);else frame.Text(button.X,button.Y,new string(' ',button.Width));frame.Buttons.Remove(button);}
             frame.Text(3,32,new string(' ',width-36));
-            frame.Text(3,32,"REVOTE: tied options | ENTER: Vote | N: No vote",ConsoleColor.Yellow);
-            if(member.View.Screen==Screen.Loans)
+            frame.Text(3,32,"REVOTE: tied options | ENTER: Vote | N: No | V: Neutral",ConsoleColor.Yellow);
+            if(keepVisible)
             {
-                foreach(var card in frame.Buttons.Where(b=>b.Action=="select"&&!tied.Any(v=>v.Action=="loanTake"&&v.Index==b.Index)).ToArray())
+                foreach(var card in frame.Buttons.Where(b=>(b.Action=="select"||b.Action=="shopSelect")&&!tied.Any(v=>v.Action==(b.Action=="shopSelect"?"buy":member.View.Screen==Screen.Loans?"loanTake":"play")&&v.Index==b.Index)).ToArray())
                 {
                     for(int y=card.Y;y<card.Y+card.Height;y++)frame.Recolor(card.X,y,card.Width,ConsoleColor.DarkGray);
-                    frame.Text(card.X+2,card.Y+13,"Not in this revote",ConsoleColor.DarkGray);frame.Buttons.Remove(card);
+                    frame.Text(card.X+2,card.Y+card.Height-2,"Not in this revote",ConsoleColor.DarkGray);frame.Buttons.Remove(card);
                 }
             }
         }
@@ -80,10 +82,10 @@ public sealed partial class LanMatch
             if(!card&&!shop&&target.Y-top==28&&viewer.View.Screen is Screen.Table or Screen.Events or Screen.Shop)row=target.Y-1;
             if(choice.Action=="endless")row=target.Y-1;
             if(choice.Action=="skip"&&viewer.View.Screen==Screen.Shop)row=target.Y-1;
-            if(choice.Action=="noVote")
+            if(choice.Action is "noVote" or "abstain")
             {
                 int x=target.X+target.Width+1;
-                for(int i=0;i<voters.Length;i++){var voter=Members[voters[i].Key];c.Text(x+i*2,target.Y,$"●{voter.Color+1}",PlayerColors[voter.Color]);}
+                for(int i=0;i<voters.Length;i++){var voter=Members[voters[i].Key];c.Text(x+i*(choice.Action=="abstain"?1:2),target.Y,choice.Action=="abstain"?"●":$"●{voter.Color+1}",PlayerColors[voter.Color]);}
                 continue;
             }
             int maxWidth=card||shop?target.Width-4:Math.Max(target.Width,c.Buttons.Where(b=>b.Y==target.Y&&b.X>target.X).Select(b=>b.X-target.X-1).DefaultIfEmpty(target.Width+16).Min());
@@ -100,3 +102,4 @@ public sealed partial class LanMatch
         }
     }
 }
+

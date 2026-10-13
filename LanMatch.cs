@@ -14,7 +14,7 @@ public static class PlayerAvatars
 }
 public sealed record VoteChoice(string Action,int Index=-1)
 {
-    public string Label=>Action switch {"noVote"=>"No vote","play"=>$"Card {Index+1}","buy"=>$"Buy {Index+1}","loanTake"=>$"Loan {Index+1}","loans"=>"Open loans","loanBack"=>"Leave loans","loanRepay"=>"Repay loan","shopReroll"=>"Refresh shop","next"=>"Next month","continue" or "companyContinue"=>"Continue","skip"=>"Skip",_=>Action};
+    public string Label=>Action switch {"noVote"=>"No vote","abstain"=>"Skip vote (neutral)","play"=>$"Card {Index+1}","buy"=>$"Buy {Index+1}","loanTake"=>$"Loan {Index+1}","loans"=>"Open loans","loanBack"=>"Leave loans","loanRepay"=>"Repay loan","shopReroll"=>"Refresh shop","next"=>"Next month","continue" or "companyContinue"=>"Continue","skip"=>"Skip",_=>Action};
 }
 public sealed class TeamBallot
 {
@@ -22,22 +22,23 @@ public sealed class TeamBallot
     public HashSet<VoteChoice>? TiedChoices {get;private set;}
     public DateTimeOffset? Deadline {get;private set;}
     public bool Revote=>TiedChoices!=null;
+    public bool KeepChoicesVisible {get;private set;}
     public bool Cast(int player,VoteChoice choice,DateTimeOffset now)
     {
-        if(TiedChoices!=null && !TiedChoices.Contains(choice)&&choice.Action!="noVote") return false;
-        Deadline??=now.AddSeconds(20); Votes[player]=choice; return true;
+        if(TiedChoices!=null && !TiedChoices.Contains(choice)&&choice.Action is not ("noVote" or "abstain")) return false;
+        Deadline??=now.AddSeconds(20); Votes[player]=choice;KeepChoicesVisible|=choice.Action=="noVote";return true;
     }
     public (bool Done,VoteChoice? Winner,bool Skipped) Resolve(IReadOnlyCollection<int> players,DateTimeOffset now)
     {
         if(Deadline==null || now<Deadline && players.Any(id=>!Votes.ContainsKey(id))) return (false,null,false);
-        var eligible=Votes.Where(v=>players.Contains(v.Key)).GroupBy(v=>v.Value).Select(g=>(Choice:g.Key,Count:g.Count())).ToList();
+        var eligible=Votes.Where(v=>players.Contains(v.Key)&&v.Value.Action!="abstain").GroupBy(v=>v.Value).Select(g=>(Choice:g.Key,Count:g.Count())).ToList();
         if(eligible.Count==0) { Clear();return(true,null,true); }
         int maximum=eligible.Max(v=>v.Count); var tied=eligible.Where(v=>v.Count==maximum).Select(v=>v.Choice).ToList();
         if(tied.Count==1) { var winner=tied[0]; Clear();return(true,winner,false); }
         if(Revote) { Clear();return(true,null,true); }
         TiedChoices=tied.ToHashSet(); Votes.Clear(); Deadline=now.AddSeconds(10); return(false,null,false);
     }
-    public void Clear(){Votes.Clear();TiedChoices=null;Deadline=null;}
+    public void Clear(){Votes.Clear();TiedChoices=null;Deadline=null;KeepChoicesVisible=false;}
 }
 public sealed class LanMember(int id,PlayerIdentity identity,int team,GameApp view)
 {
@@ -98,8 +99,8 @@ public sealed partial class LanMatch
         VoteChoice? choice=null;
         if(input.X>=0)
         {
-            var no=NoVoteButton(member.Width,member.Height);
-            if(input.X>=no.X&&input.X<no.X+no.Width&&input.Y==no.Y)choice=new("noVote");
+            foreach(var button in BallotButtons(member.Width,member.Height))
+                if(input.X>=button.X&&input.X<button.X+button.Width&&input.Y==button.Y)choice=new(button.Action);
             int left=32+Math.Max(0,(member.Width-Math.Min(172,member.Width))/2),top=Math.Max(0,(member.Height-Math.Min(46,member.Height))/2);
             int x=input.X-left,y=input.Y-top;
             HitBox? hit=frame.Buttons.LastOrDefault(b=>x>=b.X&&x<b.X+b.Width&&y>=b.Y&&y<b.Y+b.Height);
@@ -136,6 +137,7 @@ public sealed partial class LanMatch
             if(input.Key==ConsoleKey.L&&member.View.Screen!=Screen.Loans)choice=new("loans");
             if(input.Key==ConsoleKey.Escape&&member.View.Screen==Screen.Loans)choice=new("loanBack");
             if(input.Key==ConsoleKey.N)choice=new("noVote");
+            if(input.Key==ConsoleKey.V)choice=new("abstain");
             if(LoanProposal(team)&&member.View.Screen!=Screen.Loans)
             {
                 if(input.Key is ConsoleKey.L or ConsoleKey.Enter)choice=new("loans");
@@ -154,8 +156,8 @@ public sealed partial class LanMatch
         if(choice!=null)
         {
             var changing=VotingActions;
-            if(LoanProposal(team)&&choice.Action is not ("loans" or "noVote")){member.Notice="Loan proposal: L/ENTER yes, N no vote.";return;}
-            if(choice.Action=="loans"&&team.Ballot.Votes.Values.Any(v=>v.Action is not ("loans" or "noVote"))){member.Notice="Finish this vote first, or use N to reject it.";return;}
+            if(LoanProposal(team)&&choice.Action is not ("loans" or "noVote" or "abstain")){member.Notice="Loan proposal: L/ENTER yes, N no vote.";return;}
+            if(choice.Action=="loans"&&team.Ballot.Votes.Values.Any(v=>v.Action is not ("loans" or "noVote" or "abstain"))){member.Notice="Finish this vote first, or use N to reject it.";return;}
             if(choice.Action is "main" or "retry" || choice.Action=="back"&&member.View.Screen==Screen.End)member.Notice="Q: Leave the match. Start a new lobby for a rematch.";
             else if(choice.Action=="endless"&&(run.Phase!=Phase.Won||run.Endless||Teams.Any(t=>t.Run.Phase is not (Phase.Won or Phase.Lost))))member.Notice="Endless opens when every company finishes its year.";
             else if(!changing.Contains(choice.Action)) member.View.LanAction(choice.Action,choice.Index);
@@ -179,6 +181,7 @@ public sealed partial class LanMatch
     void Apply(LanMember member,VoteChoice choice,DateTimeOffset now,IEnumerable<VoteChoice>? previousChoices=null,IReadOnlyDictionary<int,VoteChoice>? previousVotes=null)
     {
         var team=Teams[member.Team];var run=team.Run;
+        if(choice.Action=="abstain"){CancelVote(team,"Everyone stayed neutral. Cards and phase unchanged.");return;}
         if(choice.Action=="noVote"){CancelVote(team,"Vote rejected. Cards and phase unchanged.");return;}
         if(choice.Action is "loans" or "loanBack")
         {
@@ -222,7 +225,8 @@ public sealed partial class LanMatch
             var voters=Members.Where(m=>m.Team==Teams.IndexOf(team)&&m.Connected).Select(m=>m.Id).ToArray();
             if(voters.Length==0 && team.Run.Phase is not (Phase.Won or Phase.Lost)){team.Run.ForfeitLan();team.Ballot.Clear();foreach(var member in Members.Where(m=>m.Team==Teams.IndexOf(team))){member.Animation.Clear();member.View.AttachLanRun(team.Run);}Revision++;}
             bool wasRevote=team.Ballot.Revote;
-            var previousChoices=team.Ballot.TiedChoices;
+            IEnumerable<VoteChoice>? previousChoices=team.Ballot.TiedChoices;
+            if(previousChoices!=null&&team.Ballot.KeepChoicesVisible)previousChoices=previousChoices.Append(new("noVote"));
             var previousVotes=team.Ballot.Deadline!=null?new Dictionary<int,VoteChoice>(team.Ballot.Votes):null;
             var resolution=team.Ballot.Resolve(voters,now);
             if(!wasRevote && team.Ballot.Revote)
@@ -277,10 +281,7 @@ public sealed partial class LanMatch
         var canvas=new Canvas(width,height);
         if(!Started)
         {
-            canvas.Center(top+3,"LAN LOBBY - "+Mode,ConsoleColor.Cyan);
-            canvas.Center(top+5,"Players: "+Members.Count(m=>m.Connected)+" / "+Slots.Sum());
-            canvas.Center(top+7,id==0?"ENTER: Start when every slot is filled":"Waiting for the host to start");
-            canvas.Center(top+9,"Team slots: "+string.Join(" / ",Slots));
+            DrawLobby(canvas,id,left,top,coreWidth,coreHeight);
         }
         else
         {
@@ -312,14 +313,15 @@ public sealed partial class LanMatch
         if(Started)
         {
             string clock=DecisionDeadline!=null?$"DECISIONS {Time(DecisionDeadline.Value-now)}":ShopDeadline!=null?$"SHOP {Time(ShopDeadline.Value-now)}":Teams.All(t=>t.Run.Phase is Phase.Won or Phase.Lost)?"MATCH COMPLETE":"EVENTS / MONTHLY RESULTS";
-            canvas.Text(left+1,top+coreHeight-5,clock,ConsoleColor.Cyan);
+            canvas.Text(left+1,top+coreHeight-6,clock,ConsoleColor.Cyan);
             var ballot=Teams[member.Team].Ballot;
             if(ballot.Deadline!=null)
             {
-                canvas.Text(left+1,top+coreHeight-4,$"{(ballot.Revote?"REVOTE":"VOTE")} {Time(ballot.Deadline.Value-now)} | N: No",ConsoleColor.Yellow);
+                canvas.Text(left+1,top+coreHeight-5,$"{(ballot.Revote?"REVOTE":"VOTE")} {Time(ballot.Deadline.Value-now)} | N: No",ConsoleColor.Yellow);
             }
-            else if(Teams[member.Team].Run.Phase is not (Phase.Won or Phase.Lost)&&Members.Count(m=>m.Team==member.Team&&m.Connected)>1)canvas.Text(left+1,top+coreHeight-4,"ENTER: Vote | N: No vote",ConsoleColor.Yellow);
-            canvas.Button(left+1,top+coreHeight-3,"N NO VOTE","noVote");
+            else if(Teams[member.Team].Run.Phase is not (Phase.Won or Phase.Lost)&&Members.Count(m=>m.Team==member.Team&&m.Connected)>1)canvas.Text(left+1,top+coreHeight-5,"ENTER: Vote | N: No vote",ConsoleColor.Yellow);
+            canvas.Button(left+1,top+coreHeight-4,"N NO VOTE","noVote");
+            canvas.Button(left+1,top+coreHeight-3,"V SKIP VOTE","abstain");
         }
         if(Started&&member.Animation.Count==0)VoteMarkers(canvas,member,rightEdge:left+32+coreWidth-30);
         return canvas;
@@ -358,3 +360,5 @@ public sealed partial class GameApp
         return TakeFeedbackFrames(width,height);
     }
 }
+
+

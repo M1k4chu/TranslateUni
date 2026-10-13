@@ -18,8 +18,7 @@ public static partial class Verification
         foreach(int id in new[]{0,1,2})m.Input(id,new(ConsoleKey.L),now);
         m.Input(0,new(ConsoleKey.D1),now);m.Input(0,new(ConsoleKey.Enter),now);m.Input(1,new(ConsoleKey.D3),now);m.Input(1,new(ConsoleKey.Enter),now);m.Tick(now.AddSeconds(20));
         Canvas offers=m.Render(2,172,46,now.AddSeconds(20));
-        foreach(var offer in run.LoanOffers)Check(offers.Lines().Any(line=>line.Contains(offer.Name)),"loan revote preserves visible offer "+offer.Name);
-        Check(offers.Buttons.Count(b=>b.Action=="select")==2,"excluded loan offer stays visible but cannot receive a revote");
+        Check(offers.Buttons.Count(b=>b.Action=="select")==2,"loan-only tie offers the two tied choices");
         foreach(int id in new[]{0,1,2})m.Input(id,new(ConsoleKey.N),now.AddSeconds(21));
         Check(!run.HasActiveLoan&&run.Hand.SequenceEqual(hand)&&run.Actions==actions&&run.CaptureStats()==before&&m.Members.All(p=>p.View.Screen==Screen.Loans),"No during loan revote cancels the vote and leaves the loan screen and cards intact");
         foreach(int id in new[]{0,1,2}){m.Input(id,new(ConsoleKey.D1),now.AddSeconds(22));m.Input(id,new(ConsoleKey.Enter),now.AddSeconds(22));}
