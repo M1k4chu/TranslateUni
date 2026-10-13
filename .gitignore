@@ -1,0 +1,9 @@
+bin/
+obj/
+play/
+data/
+.vs/
+*.user
+*.suo
+*.zip
+*.bundle
