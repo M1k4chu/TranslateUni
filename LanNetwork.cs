@@ -61,7 +61,7 @@ public static class LanMultiplayer
     }
     public static void Open(List<Course> courses,PlayMode mode,PlayerIdentity profile,TerminalInput input)
     {
-        bool joining=false,online=false;string address="",error="";int course=0,topic=0,difficulty=0;
+        bool joining=false,online=false,showAddress=false;string address="",error="";int course=0,topic=0,difficulty=0;
         var counts=new PlayerCountSelection();
         try{if(Console.WindowWidth<140 && OperatingSystem.IsWindows()){int width=Math.Min(172,Console.LargestWindowWidth);Console.SetBufferSize(Math.Max(Console.BufferWidth,width),Console.BufferHeight);Console.SetWindowSize(width,Console.WindowHeight);}}catch(IOException){}catch(ArgumentOutOfRangeException){}
         while(true)
@@ -76,7 +76,9 @@ public static class LanMultiplayer
             counts.Draw(c,mode,joining,0);
             c.Center(20,online?(joining?"Paste the complete invite code from your host":"Type your public IP / DNS / VPN address, optionally :port"):joining?$"Type your host's LAN IP / name. Default port: {Port}.":"Create the lobby, then share your LAN address with the other players.");
             c.Text(5,22,!joining&&!online?"Hosting port (blank = 45873):":"Address / invite:",ConsoleColor.Cyan);
-            int editWidth=Math.Max(20,w-10);string edit=address+"_";
+            c.Button(Math.Max(38,w-48),22,showAddress?"F10 HIDE":"F10 SHOW","sharingToggle");
+            if(joining&&online)c.Button(w-30,22,"F11 COPY INVITE","copyInvite");
+            int editWidth=Math.Max(20,w-10);string edit=showAddress?address+"_":address.Length==0?"Type or paste here...":$"[hidden - {address.Length} characters entered]";
             for(int row=0;row<4&&row*editWidth<edit.Length;row++)c.Text(5,23+row,edit.Substring(row*editWidth,Math.Min(editWidth,edit.Length-row*editWidth)),ConsoleColor.Cyan);
             if(online)c.Wrapped(5,28,"The host PC runs the server. For direct internet access, forward its TCP port to this PC and allow the game through the firewall. A shared VPN also works.",Math.Max(20,w-10),3);
             c.Center(32,"Team captains choose player counts before starting. Names must be unique.");if(error.Length>0)c.Wrapped(5,34,error,Math.Max(20,w-10),3,ConsoleColor.Red);
@@ -85,6 +87,10 @@ public static class LanMultiplayer
             var setupHit=c.Buttons.LastOrDefault(b=>key.X>=b.X&&key.X<b.X+b.Width&&key.Y==b.Y);
             if(setupHit?.Action is "host" or "join"){bool nextJoining=setupHit.Action=="join";if(nextJoining!=joining)address="";joining=nextJoining;error="";input.DiscardPending();continue;}
             if(setupHit?.Action=="network")key=new(ConsoleKey.F6);
+            if(setupHit?.Action=="sharingToggle")key=new(ConsoleKey.F10);
+            if(setupHit?.Action=="copyInvite")key=new(ConsoleKey.F11);
+            if(key.Key==ConsoleKey.F10){showAddress=!showAddress;continue;}
+            if(key.Key==ConsoleKey.F11&&joining&&online){error=GameClipboard.Copy(address)?"Invite copied!":"Clipboard unavailable. F10: Show invite.";continue;}
             
             if(setupHit?.Action=="connect")key=new(ConsoleKey.Enter);
             if(key.Key==ConsoleKey.Escape)return;
@@ -113,6 +119,7 @@ public static class LanMultiplayer
         var match=new LanMatch(courses,mode,slots,course,topic,difficulty,GameSeeds.New());var local=match.Add(profile,mode==PlayMode.RivalryCoop?-1:0);
         var listener=StartListener(room?.Invite.Port??HostingPort(address),!online);
         int port=((IPEndPoint)listener.LocalEndpoint).Port;
+        var sharing=new LobbySharing(Addresses(port),room?.Invite.Code);Canvas? hostFrame=null;
         var peers=new Dictionary<LanPeer,int>();var pending=new Dictionary<TcpClient,Task<LanPeer>>();var accepted=new Dictionary<LanPeer,DateTimeOffset>();DateTimeOffset lastSend=DateTimeOffset.MinValue;
         try
         {
@@ -156,6 +163,7 @@ public static class LanMultiplayer
                     }
                 }
                 Input next=input.Read(30);if(next.Key==ConsoleKey.Q)break;
+                if(!match.Started&&sharing.Handle(next,hostFrame)){input.DiscardPending();lastSend=DateTimeOffset.MinValue;next=new();}
                 if(next.Key==ConsoleKey.F9&&!match.Started&&room!=null){Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory,"data"));File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"data","online-invite.txt"),room.Invite.Code);}
                 if(next.Key!=ConsoleKey.NoName||next.X>=0){int revision=match.Revision;match.Input(0,next,DateTimeOffset.UtcNow);if(revision!=match.Revision)input.DiscardPending();}
                 int beforeTick=match.Revision;match.Tick(DateTimeOffset.UtcNow);if(beforeTick!=match.Revision)input.DiscardPending();
@@ -164,16 +172,9 @@ public static class LanMultiplayer
                 Canvas frame=match.Render(0,Console.WindowWidth,Console.WindowHeight,DateTimeOffset.UtcNow);
                 if(!match.Started)
                 {
-                    frame.Text(3,frame.Height-3,"Join address: "+Addresses(port)+" | Q: Exit");
-                    if(room!=null)
-                    {
-                        int left=32+Math.Max(0,(frame.Width-Math.Min(172,frame.Width))/2),top=Math.Max(0,(frame.Height-Math.Min(46,frame.Height))/2);
-                        frame.Text(left+3,top+23,"ONLINE INVITE (F9: Save complete code)",ConsoleColor.Cyan);
-                        int codeWidth=Math.Max(20,Math.Min(140,frame.Width-32)-6);string code=room.Invite.Code;
-                        for(int row=0;row<5&&row*codeWidth<code.Length;row++)frame.Text(left+3,top+24+row,code.Substring(row*codeWidth,Math.Min(codeWidth,code.Length-row*codeWidth)),ConsoleColor.Cyan);
-                        frame.Wrapped(left+3,top+30,$"Share the complete code with your players. Forward TCP {port} to this PC (or use a shared VPN). Hosting stays on this computer.",Math.Min(140,frame.Width-32)-6,4);
-                    }
+                    sharing.Draw(frame,port);
                 }
+                hostFrame=frame;
                 try{frame.Flush();}catch(ArgumentOutOfRangeException){continue;}
                 foreach(var peer in peers.Where(p=>p.Value>=0)) {var member=match.Members.Single(m=>m.Id==peer.Value);peer.Key.Send(LanPeer.Frame(match.Render(member.Id,member.Width,member.Height,DateTimeOffset.UtcNow),member.Id,match.Revision));}
             }
