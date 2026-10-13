@@ -12,7 +12,7 @@ public static class Verification
             string[] lines = app.Render(120, 42).Lines();
             foreach (HitBox control in app.Render(120,42).Buttons.Where(b => b.Action is "tutorialBegin" or "tutorialFinish" or "inspectBack" or "buy" or "next" or "play" or "continue"))
                 Check(lines[control.Y][control.X] == '[', "statistics do not hide controls on " + app.Screen);
-            Check(lines[37].Contains("CASH") && lines[37].Contains("DEBT") && lines[37].Contains("STOCK"), "persistent statistics bars on " + app.Screen);
+            Check(lines[39].Contains("CASH") && lines[39].Contains("DEBT") && lines[39].Contains("STOCK"), "persistent statistics bars on " + app.Screen);
         }
     }
 
@@ -21,6 +21,7 @@ public static class Verification
         assertions = 0;
         CheckLoansAndStatistics(courses);
         CheckInputAndTheme(courses);
+        CheckStatementsAndMotion(courses);
         Check(courses.Count == 6 && courses.Sum(c => c.Lessons.Count) == 60, "all course data retained");
         Check(GameContent.Decisions.Length == 32 && Run.BoosterPool.Length == 20, "expanded pools");
         foreach (Card card in GameContent.Decisions)
@@ -150,10 +151,10 @@ public static class Verification
         Key(app, ConsoleKey.Enter); Check(app.Screen == Screen.TutorialIntro, "practice opens from merged guide");
         Check(app.Game!.Rerolls == 1, "tutorial starts with one reroll");
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1);
-        Canvas selected = app.Render(108, 40);
+        Canvas selected = app.Render(108, 42);
         Check(selected.Lines()[10][3] == '+' && selected.Lines()[12].Count(c => c == '+') == 4, "two-row selection lift");
         Check(selected.Lines().Any(line => line.Contains("Shout louder")), "funny card explanation visible");
-        Check(selected.Lines()[33].Substring(0, 78).Trim().Length == 0 && selected.Lines()[37].Contains("CASH"), "statistics have a blank row above the bars");
+        Check(selected.Lines()[35].Substring(0, 78).Trim().Length == 0 && selected.Lines()[39].Contains("CASH"), "statistics have a blank row above the bars");
         foreach (Canvas source in new[] { selected, app.Render(200, 60) })
         {
             List<AnimationFrame> frames = CardAnimation.Build(source);
@@ -186,7 +187,7 @@ public static class Verification
                 HitBox other = cards.First(b => b.Index != chosen.Index);
                 Check(suction[17].Canvas.Lines()[other.Y + other.Height / 2][other.X + other.Width / 2] == '*' || other.X == centeredX, "unchosen cards collapse before selected moves");
                 Check(suction.All(f => f.Areas.Any(a => a.Y <= dotY - 1 && a.X <= centeredX && a.X + a.Width >= centeredX + chosen.Width)), "redraw includes slide and centered flight path");
-                Check(suction.All(f => f.Canvas.Lines()[source.Height > 46 ? 44 : 37] == source.Lines()[source.Height > 46 ? 44 : 37]), "statistics stay visible throughout animation");
+                Check(suction.All(f => f.Canvas.Lines()[source.Height > 46 ? 46 : 39] == source.Lines()[source.Height > 46 ? 46 : 39]), "statistics stay visible throughout animation");
                 for (int row = 0; row < chosen.Height; row++)
                     Check(suction[21].Canvas.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width) == source.Lines()[chosen.Y + row].Substring(chosen.X, chosen.Width), "selected card waits intact at original position");
             }
@@ -201,7 +202,7 @@ public static class Verification
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); Key(app, ConsoleKey.Enter);
         Check(app.Screen == Screen.Shop && app.Game.ActiveBoosts.Any(x => x.Card.Family == BoosterFamily.Green)
             && app.Game.ActiveBoosts.Any(x => x.Card.Family == BoosterFamily.Purple), "tutorial demonstrates both booster colors");
-        Canvas shop = app.Render(108, 40);
+        Canvas shop = app.Render(108, 42);
         Check(shop.Lines()[13].Count(c => c == '+') == 6 && shop.Lines()[25].Count(c => c == '+') == 6, "two shop shelves");
         Check(shop.Lines().Any(l => l.Contains("NEXT MONTH 2/12 QUOTAS")), "quotas visible in shop");
         Key(app, ConsoleKey.S); Check(app.Screen == Screen.Shop, "S navigates shop rather than exiting");
@@ -219,7 +220,7 @@ public static class Verification
         Check(app.Screen == Screen.Shop && app.Game.Month == 1, "N no longer leaves shop");
         Key(app, ConsoleKey.Spacebar);
         Check(app.Screen == Screen.TutorialComplete && app.Game.Month == 2, "tutorial demonstrates next month");
-        Canvas finished = app.Render(108, 40);
+        Canvas finished = app.Render(108, 42);
         Check(finished.Lines().Any(l => l.Contains("Last profit: $")) && finished.Lines().Any(l => l.Contains("Last sales: $")), "last month earnings next to quotas");
         Check(finished.Lines().Any(l => l.Contains("G Brand Spark")) && finished.Lines().Any(l => l.Contains("P Coupon Engine")), "both active booster names visible");
         Key(app, ConsoleKey.Enter); Check(store.History.Count == 0 && store.Preferences.TutorialCompleted && app.Screen == Screen.Guide, "practice returns to merged guide without fake result");
@@ -234,24 +235,24 @@ public static class Verification
         Key(app, ConsoleKey.D); Key(app, ConsoleKey.S); Key(app, ConsoleKey.W); Key(app, ConsoleKey.A); Key(app, ConsoleKey.Enter);
         Check(app.Game!.Difficulty == Difficulty.Easy, "WASD navigates difficulty selection");
         Key(app, ConsoleKey.D); Key(app, ConsoleKey.D);
-        Check(app.Render(108, 40).Lines()[10][27] == '+', "D selects second card");
+        Check(app.Render(108, 42).Lines()[10][27] == '+', "D selects second card");
         Key(app, ConsoleKey.A); Key(app, ConsoleKey.Spacebar);
         foreach (ConsoleKey key in new[] { ConsoleKey.R, ConsoleKey.Escape, ConsoleKey.Escape }) Key(app, key);
         Check(app.Game!.Rerolls == 0 && app.Screen == Screen.Table, "regular keyboard and pause flow");
         app.Game.ActiveBoosts.AddRange(Run.BoosterPool.Where(b => b.Persistent).Select(b => new ActiveBooster(b)));
-        Canvas longList = app.Render(108, 40);
+        Canvas longList = app.Render(108, 42);
         Check(longList.Buttons.Count(b => b.Action == "activeInspect") == 6, "long booster lists fit the side viewport");
         Key(app, ConsoleKey.PageDown); Key(app, ConsoleKey.PageDown);
-        Check(app.Render(108, 40).Lines().Any(l => l.Contains("Showing 3-8")), "page keys scroll active boosters");
+        Check(app.Render(108, 42).Lines().Any(l => l.Contains("Showing 3-8")), "page keys scroll active boosters");
         foreach (int i in Enumerable.Range(0, 40)) Key(app, ConsoleKey.PageDown);
-        Canvas lastPage = app.Render(108, 40);
+        Canvas lastPage = app.Render(108, 42);
         int lastIndex = lastPage.Buttons.Where(b => b.Action == "activeInspect").Max(b => b.Index);
         Check(lastIndex == app.Game.ActiveBoosts.Count - 1, "scroll reaches the final active booster");
         Key(app, ConsoleKey.E); Key(app, ConsoleKey.E); Key(app, ConsoleKey.Enter);
         Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.E);
         Check(app.Screen == Screen.Shop, "regular run reaches randomized shop");
         double uiCash = app.Game.Cash;
-        Check(app.Render(108, 40).Buttons.Any(b => b.Action == "shopReroll"), "shop refresh button is present");
+        Check(app.Render(108, 42).Buttons.Any(b => b.Action == "shopReroll"), "shop refresh button is present");
         Key(app, ConsoleKey.R);
         Check(app.Game.Cash == uiCash - 75 && app.Game.ShopRerolls == 1 && app.Game.Rerolls == 0, "R uses paid shop reroll rather than decision reroll");
         Key(app, ConsoleKey.Spacebar);
@@ -344,8 +345,8 @@ public static class Verification
         typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(ui, Screen.End);
         Check(ui.Render(120, 42).Buttons.Any(button => button.Action == "endless"), "victory screen offers endless choice");
         Key(ui, ConsoleKey.E); Check(ui.Screen == Screen.Booster && ui.Game!.Endless, "E enters endless rewards");
-        Key(ui, ConsoleKey.E); Check(ui.Screen == Screen.Shop && ui.Render(108, 40).Lines().Any(line => line.Contains("Tiers 1-5")), "unlocked tier cap appears in shop sidebar");
-        Key(ui, ConsoleKey.Spacebar); Check(ui.Game!.Month == 13 && ui.Render(108, 40).Lines().Any(line => line.Contains("ENDLESS MONTH 13")), "endless progress is rendered correctly");
+        Key(ui, ConsoleKey.E); Check(ui.Screen == Screen.Shop && ui.Render(108, 42).Lines().Any(line => line.Contains("Tiers 1-5")), "unlocked tier cap appears in shop sidebar");
+        Key(ui, ConsoleKey.Spacebar); Check(ui.Game!.Month == 13 && ui.Render(108, 42).Lines().Any(line => line.Contains("ENDLESS MONTH 13")), "endless progress is rendered correctly");
         Key(ui, ConsoleKey.Escape); Key(ui, ConsoleKey.M);
         Check(new Storage(Path.Combine(directory, "endless-ui")).History.Count == 1, "abandoning endless updates the same run record");
         Console.WriteLine($"Endless sample: {endlessResult.Cleared - 12} extra quotas cleared; ended in month {endlessResult.Month}.");
@@ -410,27 +411,27 @@ public static class Verification
         var normal = new Run(courses[0], 0, Difficulty.Easy, 18);
         typeof(GameApp).GetProperty(nameof(GameApp.Game))!.SetValue(app, normal);
         typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.Table);
-        Key(app, ConsoleKey.L); Check(app.Screen == Screen.Loans && app.Render(108,40).Buttons.Count(b => b.Action == "select") == 3, "L opens three loan cards");
+        Key(app, ConsoleKey.L); Check(app.Screen == Screen.Loans && app.Render(108,42).Buttons.Count(b => b.Action == "select") == 3, "L opens three loan cards");
         Key(app, ConsoleKey.D3); Key(app, ConsoleKey.Enter);
         Check(app.Screen == Screen.Loans && normal.HasActiveLoan && app.TakeAnimationFrames().Count == 52, "loan choice stays in repayment view and animates selected offer");
-        Canvas repayment=app.Render(108,40);
+        Canvas repayment=app.Render(108,42);
         Check(repayment.Buttons.All(b => b.Action != "select" && b.Action != "loanTake") && repayment.Buttons.Any(b => b.Action=="loanRepay"), "active loan screen only offers repayment");
         Key(app, ConsoleKey.P);
-        Check(app.Render(108,40).Lines().Any(line=>line.Contains("Next loan in 3 months")) && app.Render(108,40).Buttons.All(b=>b.Action!="loanRepay" && b.Action!="loanTake"), "repaid loan screen shows cooldown without borrowing controls");
+        Check(app.Render(108,42).Lines().Any(line=>line.Contains("Next loan in 3 months")) && app.Render(108,42).Buttons.All(b=>b.Action!="loanRepay" && b.Action!="loanTake"), "repaid loan screen shows cooldown without borrowing controls");
         Check(normal.Debt == 0 && !normal.CanBorrow, "loan desk repayment applies cooldown");
         Key(app, ConsoleKey.Escape); Check(app.Screen == Screen.Table, "loan screen returns safely");
-        foreach ((int width, int height) in new[] { (108,40), (120,42), (140,46) })
+        foreach ((int width, int height) in new[] { (108,42), (120,42), (140,46) })
         {
             Canvas frame = app.Render(width,height); string[] lines = frame.Lines();
             int tableWidth = width - 30;
-            Check(lines[33][..tableWidth].Trim().Length == 0 && GameApp.StatChangeRow == GameApp.StatBarTop - 2, "change labels have exactly one empty row before bars");
-            Check(GameApp.StatChangeRow == 32 && GameApp.StatBarTop == 34 && GameApp.StatBarBottom == 36 && lines[37].Contains("CASH") && lines[37].Contains("SERVICE"), "whole statistics board is lowered by two rows");
-            Check(Enumerable.Range(34,3).All(y => lines[y][..tableWidth].Count(c => c == '│') == 20), "every statistic has its own vertical progress bar");
+            Check(lines[35][..tableWidth].Trim().Length == 0 && GameApp.StatChangeRow == GameApp.StatBarTop - 2, "change labels have exactly one empty row before bars");
+            Check(GameApp.StatChangeRow == 34 && GameApp.StatBarTop == 36 && GameApp.StatBarBottom == 38 && lines[39].Contains("CASH") && lines[39].Contains("SERVICE"), "whole statistics board is lowered by two rows");
+            Check(Enumerable.Range(36,3).All(y => lines[y][..tableWidth].Count(c => c == '│') == 20), "every statistic has its own vertical progress bar");
         }
         typeof(Run).GetProperty(nameof(Run.Phase))!.SetValue(normal, Phase.Shop);
         normal.ShopOffers.Clear(); normal.ShopOffers.Add(ShopUpgrades.Offer(0,3)); normal.ShopTiers[0] = 3;
         typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app, Screen.Shop);
-        Canvas shop = app.Render(108,40); string[] shopLines = shop.Lines();
+        Canvas shop = app.Render(108,42); string[] shopLines = shop.Lines();
         Check(shopLines[14].Contains("SELECTED") && shop.ColorAt(3,13) == ConsoleColor.Magenta && shopLines[13][3] == '+' && shopLines[15][3] == '+', "selected shop item has a purple selection box");
         Check(shopLines[8].Contains("MAX TIER") && shop.ColorAt(3,8) == ConsoleColor.Magenta, "selected completed upgrade keeps the selection accent");
     }
@@ -448,7 +449,7 @@ public static class Verification
         { int x=canvas.Lines()[0].IndexOf(name,StringComparison.Ordinal); Check(canvas.ColorAt(x,0)==color,"mixed statistic text has consistent colors: "+name); }
         Check(canvas.ColorAt(canvas.Lines()[0].IndexOf("$75"),0)==ConsoleColor.Red && canvas.ColorAt(canvas.Lines()[0].IndexOf("$400"),0)==ConsoleColor.Green,"statistic amounts match their labels");
         Check(GameTheme.Statistic("pay")==GameTheme.Statistic("debt") && GameTheme.Statistic("interest")==GameTheme.Statistic("debt"), "repayment and interest text use debt colors");
-        Check(GameTheme.Palette.Skip(9).All(c=>Math.Max(c.R,Math.Max(c.G,c.B))-Math.Min(c.R,Math.Min(c.G,c.B))<65),"accent palette is soft rather than highly saturated");
+        Check(GameTheme.Palette.Skip(9).All(c=>Math.Max(c.R,Math.Max(c.G,c.B))-Math.Min(c.R,Math.Min(c.G,c.B))<90),"accent palette is brighter but avoids full saturation");
         var app=new GameApp(courses,new Storage(Path.Combine(Path.GetTempPath(),"TranslateUni-input-tests-"+Guid.NewGuid().ToString("N"))));
         int version=app.InputVersion; Key(app,ConsoleKey.Enter); Check(app.InputVersion>version,"menu transition requests queue clearing");
         var run=new Run(courses[0],0,Difficulty.Easy,99);
@@ -456,6 +457,54 @@ public static class Verification
         Key(app,ConsoleKey.D1); version=app.InputVersion; Key(app,ConsoleKey.R); Check(app.InputVersion>version,"reroll requests clearing even on same screen");
         Key(app,ConsoleKey.L); Key(app,ConsoleKey.D1); version=app.InputVersion; Key(app,ConsoleKey.Enter); Check(app.InputVersion>version,"taking a loan requests clearing before repayment view");
         version=app.InputVersion; Key(app,ConsoleKey.P); Check(app.InputVersion>version,"repayment requests clearing before cooldown view");
+    }
+
+
+    static void CheckStatementsAndMotion(List<Course> courses)
+    {
+        var run=new Run(courses[0],0,Difficulty.Easy,112,tutorial:true);
+        Check(run.Preview().Breakdown!=null && Math.Abs(run.Preview().Breakdown!.Lines.Sum(line=>line.Amount)-run.Preview().Profit)<.001,"initial breakdown sums to forecast profit");
+        run.Play(0); run.FinishDecisions();
+        run.Events[0]=new("Office Bake Sale","",Custom:7); run.TakeEvent(0);
+        ProfitBreakdown saved=run.LastReport!.Breakdown!;
+        Check(saved.Lines.Any(line=>line.Name=="Advertise Product" && line.Amount==-180),"statement includes actual advertising expense");
+        Check(saved.Lines.Any(line=>line.Name=="Office Bake Sale" && line.Amount==180),"statement includes actual event payout");
+        Check(Math.Abs(saved.Lines.Sum(line=>line.Amount)-run.LastReport.Profit)<.001 && saved.Total==run.LastReport.Profit,"settled statement exactly reconciles with true profit");
+        Check(saved.AvailableStock==450 && run.Inventory==450-run.LastReport.Sold,"statement captures pre-sale inventory rather than recalculating after settlement");
+        foreach(var course in courses)
+        for(int seed=0;seed<16;seed++)
+        {
+            var sample=new Run(course,Math.Min(9,course.Lessons.Count-1),Difficulty.Hard,seed);
+            sample.Hand[0]=new(CardKind.Advertise,"Ads"); sample.Play(0);
+            sample.Hand[0]=new(CardKind.Express,"Express"); sample.Play(0);
+            sample.TakeEvent(seed%3);
+            var report=sample.LastReport!;
+            Check(report.Breakdown!=null && Math.Abs(report.Breakdown.Lines.Sum(line=>line.Amount)-report.Profit)<.001,"different course/event statements reconcile with actual settlement");
+        }
+        var app=new GameApp(courses,new Storage(Path.Combine(Path.GetTempPath(),"TranslateUni-statement-tests-"+Guid.NewGuid().ToString("N"))));
+        var company=new Run(courses[0],0,Difficulty.Easy,51);
+        typeof(GameApp).GetProperty(nameof(GameApp.Game))!.SetValue(app,company);
+        typeof(GameApp).GetProperty(nameof(GameApp.Screen))!.SetValue(app,Screen.Table);
+        company.Hand[0]=new(CardKind.RaisePrice,"Raise price");
+        StatSnapshot before=company.CaptureStats(); Key(app,ConsoleKey.D1); Key(app,ConsoleKey.Enter);
+        var feedback=app.TakeFeedbackFrames(108,42);
+        Check(feedback.Count==10 && feedback.Sum(f=>f.Delay)==300 && feedback.All(f=>f.Stage==AnimationStage.Statistics),"stat change gets a short 300ms animation");
+        StatSnapshot after=company.CaptureStats();
+        Check(StatMotion.Interpolate(before,after,0)==before && StatMotion.Interpolate(before,after,1)==after,"stat interpolation has exact endpoints");
+        Check(StatMotion.Interpolate(before,after,.5).Price>before.Price && StatMotion.Interpolate(after,before,.5).Price<after.Price,"increases and decreases animate in the proper direction");
+        Check(app.TakeFeedbackFrames(108,42).Count==0 && company.CaptureStats()==after,"visual feedback is consumed once and does not alter gameplay statistics");
+        Key(app,ConsoleKey.E); Key(app,ConsoleKey.E);
+        var printing=app.TakeFeedbackFrames(108,42);
+        Check(printing.Count>2 && printing.All(f=>f.Stage==AnimationStage.ResultLine),"quota results queue line-by-line printing");
+        Check(printing[0].Canvas.Lines().All(line=>!line.Contains("NET PROFIT:")) && printing[^1].Canvas.Lines().Any(line=>line.Contains("NET PROFIT:")),"profit total prints after the contributing lines");
+        Check(printing[1].Canvas.Lines().Any(line=>line.Contains("Sales revenue")) && printing[0].Canvas.Lines().All(line=>!line.Contains("Sales revenue")),"first calculation prints one line at a time");
+        Check(printing[^1].Canvas.Lines()[39].Contains("CASH") && printing[^1].Canvas.Lines()[32].Contains("ENTER:"),"result printing preserves lower controls and statistics");
+        company.Reports[^1]=company.LastReport! with { Breakdown=new ProfitBreakdown(Enumerable.Range(0,25).Select(i=>new ProfitLine("Entry "+i,"",i)).ToArray(),300,180,180,450,500) };
+        Canvas first=app.Render(108,42); Check(first.Lines().Any(line=>line.Contains("PAGE 1/3")),"long statements are paginated without hiding entries");
+        Key(app,ConsoleKey.PageDown); var second=app.TakeFeedbackFrames(108,42);
+        Check(second[^1].Canvas.Lines().Any(line=>line.Contains("PAGE 2/3")) && second[^1].Canvas.Lines().Any(line=>line.Contains("Entry 12")),"next page prints its own calculation lines");
+        Key(app,ConsoleKey.PageDown); Key(app,ConsoleKey.PageDown);
+        Check(app.Render(108,42).Lines().Any(line=>line.Contains("PAGE 3/3")),"statement page navigation stays in bounds");
     }
 
     static Run ClearFirst(Course course, int seed)
@@ -531,7 +580,7 @@ public static class Verification
         void capture(string name)
         {
             File.WriteAllLines(Path.Combine(directory, name + ".txt"), app.Render(120, 42).Lines());
-            File.WriteAllLines(Path.Combine(directory, name + "-108.txt"), app.Render(108, 40).Lines());
+            File.WriteAllLines(Path.Combine(directory, name + "-108.txt"), app.Render(108, 42).Lines());
         }
         capture("01-main"); Key(app, ConsoleKey.T); capture("02-learning-guide"); Key(app, ConsoleKey.Enter); capture("02-tutorial-intro"); Key(app, ConsoleKey.Enter); Key(app, ConsoleKey.D1); capture("03-cards-and-desk");
         var flight = CardAnimation.Build(app.Render(120, 42), 0);

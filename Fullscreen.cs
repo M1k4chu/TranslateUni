@@ -50,7 +50,7 @@ public static class DisplayDiagnostics
     }
     public static void LogConsoleSize()
     {
-        try { Add($"Console grid: {Console.WindowWidth} x {Console.WindowHeight}; largest grid at current font: {Console.LargestWindowWidth} x {Console.LargestWindowHeight}; game minimum: 108 x 40"); }
+        try { Add($"Console grid: {Console.WindowWidth} x {Console.WindowHeight}; largest grid at current font: {Console.LargestWindowWidth} x {Console.LargestWindowHeight}; game minimum: 108 x 42"); }
         catch (IOException ex) { Add("Console dimensions unavailable: " + ex.Message); }
     }
 }

@@ -1,6 +1,6 @@
 namespace TranslateUni;
 
-public enum AnimationStage { MoveToCenter, Hold, Horizontal, Vertical, Suction, Star }
+public enum AnimationStage { MoveToCenter, Hold, Horizontal, Vertical, Suction, Star, Statistics, ResultLine }
 public sealed record AnimationFrame(Canvas Canvas, int Delay, AnimationStage Stage, int CardWidth, int CardHeight)
 {
     public IReadOnlyList<HitBox> Areas { get; init; } = [];
@@ -183,6 +183,7 @@ public sealed partial class GameApp
     public void PlayPendingAnimation()
     {
         List<AnimationFrame> frames = TakeAnimationFrames();
+        frames.AddRange(TakeFeedbackFrames(Console.WindowWidth,Console.WindowHeight));
         var timer = System.Diagnostics.Stopwatch.StartNew();
         long deadline = 0;
         foreach (AnimationFrame frame in frames)

@@ -47,7 +47,7 @@ public sealed partial class GameApp
             c.Wrapped(2, y + 1, (entry.Stacks > 1 ? "Per copy: " : "") + b.Description, 26, 2);
             c.Buttons.Add(new(2, y, 26, 3, "activeInspect", boosterScroll + row));
         }
-        if (g.Tutorial && tutorialStep is >= 1 and <= 9 && Screen is Screen.Table or Screen.Events or Screen.Booster)
+        if (g.Tutorial && tutorialStep is >= 1 and <= 9 && Screen is not (Screen.Pause or Screen.Inspect))
         {
             c.Text(2, 24, $"PRACTICE {tutorialStep}/9", ConsoleColor.Green);
             c.Wrapped(2, 25, TutorialInstruction, 26, 3, ConsoleColor.White);
@@ -180,7 +180,7 @@ public sealed partial class GameApp
     void DrawTutorialHint(Canvas c)
     {
         if (Game?.Tutorial != true || tutorialStep is < 1 or > 9 || Screen is Screen.Inspect or Screen.Pause) return;
-        if (Screen is Screen.Table or Screen.Events or Screen.Booster) return;
+        if (Screen is not (Screen.Pause or Screen.Inspect)) return;
         int y = Screen is Screen.Table or Screen.Events ? 7 : Screen == Screen.Booster ? 6 : Screen == Screen.Shop ? 3 : 27;
         c.Wrapped(3, y, $"PRACTICE {tutorialStep}/9: {TutorialInstruction}", c.Width - 6, 1, ConsoleColor.Green);
         c.Wrapped(3, y + 1, TutorialMeaning, c.Width - 6, 2, ConsoleColor.Yellow);

@@ -21,8 +21,9 @@ public sealed record CompanyEvent(string Name, string Flavor, string Description
 public sealed record Decoration(string Name, int Cost, string Boost, string[] Art, int Id, Rarity Rarity = Rarity.Common, int Tier = 1);
 public sealed record Quota(string Name, double Target, bool AtLeast = true);
 public sealed record MonthReport(int Month, double Revenue, double Profit, int Sold, double Service,
-    double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures, double BridgeFunding = 0);
-public sealed record Forecast(int Demand, int Sold, double Revenue, double Profit, double Service);
+    double Cash, double Share, double Debt, double Quality, double Risk, List<string> Failures, double BridgeFunding = 0, ProfitBreakdown? Breakdown = null);
+public sealed record Forecast(int Demand, int Sold, double Revenue, double Profit, double Service)
+{ public ProfitBreakdown? Breakdown { get; init; } }
 
 public sealed partial class Run
 {
@@ -177,7 +178,8 @@ public sealed partial class Run
         double interest = Debt * extraInterest; // Loan interest is a one-time fee already included in Debt.
         double carryCost = Math.Max(0, Inventory - sold) * (Course.Name == "Logistics" ? 0.35 : 0.08);
         double profit = revenue - sold * (UnitCost * costShock + carbon) - overhead - spending - interest - carryCost + InvestmentIncome;
-        return new(wanted, sold, Math.Round(revenue, 2), Math.Round(profit, 2), 100.0 * sold / wanted);
+        return new(wanted, sold, Math.Round(revenue, 2), Math.Round(profit, 2), 100.0 * sold / wanted)
+        { Breakdown = BuildBreakdown(wanted,sold,effectivePrice,carbon,overhead,interest,carryCost,profit) };
     }
 
     public double CurrentMetric(string name, Forecast? forecast = null)
@@ -252,6 +254,7 @@ public sealed partial class Run
         if (Cash < cost) { Message = $"Not enough cash: {card.Name} costs ${cost:N0}."; return false; }
         if (card.Kind == CardKind.Repay && Debt <= 0) { Message = "There is no debt to repay."; return false; }
         if (card.Kind == CardKind.Borrow) { Message = "Press L to choose from three loans."; return false; }
+        double beforeSpending = spending;
         Cash -= cost;
         switch (card.Kind)
         {
@@ -288,6 +291,7 @@ public sealed partial class Run
             case CardKind.ExportContract: demandShock *= 1.25; Cash += 150; spending += cost - 150; break;
             case CardKind.BoardRestructure: Debt = Math.Max(0, Debt - 400); Quality = Math.Min(100, Quality + 8); Share++; Risk = Math.Max(0, Risk - 8); break;
         }
+        TrackTransaction(card.Name,spending-beforeSpending);
         Share = Math.Clamp(Share, 1, 60); Risk = Math.Clamp(Risk, 0, 100);
         Actions--;
         Message = "Played " + card.Name + ".";
@@ -327,6 +331,7 @@ public sealed partial class Run
     {
         if (Phase != Phase.Events || index < 0 || index >= Events.Count) return false;
         EventCard card = Events[index];
+        double beforeSpending = spending;
         if (card.Imported is EventData data)
         {
             foreach ((string key, double value) in data.Multipliers)
@@ -360,6 +365,7 @@ public sealed partial class Run
             case 10: Cash += 600; spending -= 600; if (!insured) capacityShock *= 0.9; break;
             case 11: Cash += 900; spending -= 900; break;
         }
+        TrackTransaction(card.Name,spending-beforeSpending);
         Message = "Accepted " + card.Name + ".";
         SettleMonth();
         return true;
@@ -382,7 +388,7 @@ public sealed partial class Run
         var failures = Quotas().Where(q => q.AtLeast ? CurrentMetric(q.Name, f) + 0.001 < q.Target
             : CurrentMetric(q.Name, f) - 0.001 > q.Target).Select(q => q.Name).ToList();
         if (Cash < 0) failures.Add("Solvency");
-        Reports.Add(new(Month, f.Revenue, f.Profit, f.Sold, f.Service, Cash, Share, Debt, Quality, Risk, failures));
+        Reports.Add(new(Month, f.Revenue, f.Profit, f.Sold, f.Service, Cash, Share, Debt, Quality, Risk, failures, Breakdown: f.Breakdown));
         if (failures.Count == 0) { Cleared++; Cash += 200; }
         Phase = Phase.Result;
     }
@@ -545,6 +551,7 @@ public sealed partial class Run
         Actions = (Difficulty == Difficulty.Hard ? 2 : 3) + extraActions
             + ShopUpgrades.BonusDecisions(2, ShopTier(2), Month) + ShopUpgrades.BonusDecisions(19, ShopTier(19), Month);
         Rerolls = 1 + extraRerolls + ShopUpgrades.BonusRerolls(4, ShopTier(4), Month);
+        monthTransactions.Clear();
         spending = 0; demandShock = nextDemand; costShock = nextCost; capacityShock = nextCapacity;
         monthOverheadDiscount = nextOverheadDiscount;
         nextDemand = nextCost = nextCapacity = 1; nextOverheadDiscount = 0;

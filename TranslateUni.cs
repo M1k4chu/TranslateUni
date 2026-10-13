@@ -71,7 +71,7 @@ public static class Program
                 try { frame.Flush(); }
                 catch (ArgumentOutOfRangeException) { continue; } // The window was resized during drawing.
                 Input next = input.Read();
-                if (width < 108 || height < 40)
+                if (width < 108 || height < 42)
                 {
                     if (next.Key is ConsoleKey.Escape or ConsoleKey.Q) app.Exit();
                     continue;
@@ -131,10 +131,10 @@ public sealed partial class GameApp
             return fullscreen;
         }
         var c = new Canvas(Game == null ? width : width - 30, height);
-        if (width < 108 || height < 40)
+        if (width < 108 || height < 42)
         {
             c = new Canvas(width, height);
-            c.Center(Math.Max(0, height / 2 - 1), "Please resize this terminal to at least 108 x 40.", ConsoleColor.Yellow);
+            c.Center(Math.Max(0, height / 2 - 1), "Please resize this terminal to at least 108 x 42.", ConsoleColor.Yellow);
             c.Center(Math.Max(1, height / 2 + 1), "ESC: Exit | Recommended: 120 x 42");
             return c;
         }
@@ -163,11 +163,11 @@ public sealed partial class GameApp
             case Screen.TutorialIntro: DrawTutorialIntro(c); break;
             case Screen.TutorialComplete: DrawTutorialComplete(c); break;
         }
-        if (notice.Length > 0) c.Text(3, Game == null ? height - 3 : 31, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
-        else if (storage.Notice.Length > 0) c.Text(3, Game == null ? height - 3 : 31, storage.Notice, ConsoleColor.Yellow);
+        if (notice.Length > 0) c.Text(3, Game == null ? height - 3 : 33, notice.Length > width - 6 ? notice[..(width - 6)] : notice, ConsoleColor.Yellow);
+        else if (storage.Notice.Length > 0) c.Text(3, Game == null ? height - 3 : 33, storage.Notice, ConsoleColor.Yellow);
         if (Game == null) { GameTheme.ColorStatistics(c); return c; }
         DrawStats(c); // Persistent desk, shared by every screen in an active run.
-        DrawTutorialHint(c);
+
         GameTheme.ColorStatistics(c);
         var combined = new Canvas(width, height);
         combined.Paste(c, 0, 0);
@@ -179,7 +179,15 @@ public sealed partial class GameApp
     public void Handle(Input input, Canvas frame)
     {
         Screen previous = Screen; Phase? phase = Game?.Phase;
+        Run? previousGame=Game; StatSnapshot? before=Game?.CaptureStats();
+        pendingStatsFrom=pendingStatsTo=null; pendingResultAnimation=false;
         HandleCore(input, frame);
+        if(Game!=null && ReferenceEquals(Game,previousGame) && before!=null)
+        {
+            StatSnapshot after=Game.CaptureStats();
+            if(before!=after) { pendingStatsFrom=before; pendingStatsTo=after; InputVersion++; }
+        }
+        if(Game?.Phase==Phase.Result && phase!=Phase.Result) { pendingResultAnimation=true; resultPage=0; }
         if(Screen != previous || Game?.Phase != phase || animationSource != null) InputVersion++;
     }
     void HandleCore(Input input, Canvas frame)
@@ -196,7 +204,7 @@ public sealed partial class GameApp
         if (key == ConsoleKey.NoName) return;
         if (key == ConsoleKey.Escape) { Back(); return; }
         if (Game != null && key is ConsoleKey.PageUp or ConsoleKey.PageDown)
-        { ScrollBoosters(key == ConsoleKey.PageUp ? -1 : 1); return; }
+        { if(Screen==Screen.Result) { resultPage+=key==ConsoleKey.PageUp?-1:1; pendingResultAnimation=true; InputVersion++; } else ScrollBoosters(key == ConsoleKey.PageUp ? -1 : 1); return; }
         if (Screen == Screen.Loans)
         {
             loanIndex = Navigate(key, loanIndex, 3);
@@ -313,6 +321,8 @@ public sealed partial class GameApp
             case "difficulty": difficultyIndex = index; break;
             case "start": StartRun(); break;
             case "select": selected = index; break;
+            case "resultPrev": resultPage--; pendingResultAnimation=true; InputVersion++; break;
+            case "resultNext": resultPage++; pendingResultAnimation=true; InputVersion++; break;
             case "loanTake":
                 if (Game?.TakeLoan(index) == true) { animationSource = inputFrame; animationSelected = loanIndex; Screen = Screen.Loans; selected = -1; }
                 else notice = Game?.Message ?? "No active run.";
@@ -431,7 +441,7 @@ public sealed partial class GameApp
         if (subtitle.Length > 0) c.Center(3, subtitle, ConsoleColor.White);
     }
     void Footer(Canvas c, string text)
-    { if(Game != null) { c.Text(3, 30, text); c.Rule(39); } else { c.Rule(c.Height - 2); c.Text(3, c.Height - 1, text); } }
+    { if(Game != null) { c.Text(3, 32, text); c.Rule(41); } else { c.Rule(c.Height - 2); c.Text(3, c.Height - 1, text); } }
     void DrawMain(Canvas c)
     {
         c.Center(1, ".------------------------------------------------------.", ConsoleColor.DarkCyan);
@@ -522,7 +532,7 @@ public sealed partial class GameApp
         c.Button(c.Width - 10, 28, "B", "lockedShop");
         c.Button(3, 29, events ? "E LEAVE ALL" : "E END DECISIONS", "skip");
         c.Button(28, 29, events ? "ENTER TAKE" : "ENTER PLAY", "play");
-        c.Text(3, 31, g.Message, ConsoleColor.Yellow);
+        c.Text(3, 33, g.Message, ConsoleColor.Yellow);
         Footer(c, "1-3/WASD: Select | ENTER: Play | E: Skip | L: Loans | I: Info | ESC: Pause");
     }
     void DrawCard(Canvas c, int index, string title, string flavor, string[] lines, Rarity rarity, bool raised, ConsoleColor color)
@@ -539,29 +549,7 @@ public sealed partial class GameApp
         if (definition.Length > 6) c.Text(x + 2, y + 13, "I: full definition", ConsoleColor.Cyan);
         c.Buttons.Add(new(x, y, 22, 15, "select", index));
     }
-    void DrawResult(Canvas c)
-    {
-        Run g = Game!; MonthReport r = g.LastReport!; bool passed = r.Failures.Count == 0;
-        Header(c, passed ? "MONTH CLEARED" : "QUOTA MISSED", g.Endless ? $"Endless month {r.Month}" : $"Month {r.Month} / 12");
-        c.Center(5, passed ? g.Endless ? $"{g.Cleared - 12} ENDLESS QUOTAS MET" : $"{g.Cleared} OF 12 QUOTAS MET" : "Every quota must be met to continue.", passed ? ConsoleColor.Green : ConsoleColor.Red);
-        c.Text(6, 7, $"Units sold: {r.Sold}     Revenue: ${r.Revenue:N0}     Profit: ${r.Profit:N0}");
-        c.Text(6, 8, $"Cash before reward: ${r.Cash:N0}    Service: {r.Service:F1}%");
-        int y = 11;
-        foreach (Quota quota in g.Quotas())
-        {
-            double value = quota.Name switch { "Profit" => r.Profit, "Service" => r.Service, "Cash" => r.Cash,
-                "Share" => r.Share, "Debt" => r.Debt, "Quality" => r.Quality, "Risk" => r.Risk, _ => 0 };
-            bool okay = !r.Failures.Contains(quota.Name);
-            c.Text(6, y++, $"[{(okay ? "PASS" : "MISS")}] {quota.Name}: {Metric(quota.Name, value)} / {(quota.AtLeast ? ">=" : "<=")} {Metric(quota.Name, quota.Target)}", okay ? ConsoleColor.Green : ConsoleColor.Red);
-        }
-        c.Center(20, passed ? g.Cleared == 12 && !g.Endless ? "The twelfth month is cleared. Your company made it!"
-            : "+$200 clear bonus. Next: company news, a booster, and the shop."
-            : "Missed: " + string.Join(", ", r.Failures));
-        if (!g.Tutorial) c.Button(3, 26, "L LOANS / REPAY", "loans");
-        if (r.BridgeFunding > 0) c.Center(21, $"Bridge funding: ${r.BridgeFunding:N0}. Actual profit stays ${r.Profit:N0}.", ConsoleColor.Cyan);
-        c.Button((c.Width - 16) / 2, 23, "ENTER CONTINUE", "continue", selected: true);
-        Footer(c, "ENTER / mouse: Continue | ESC: Pause");
-    }
+    void DrawResult(Canvas c) => DrawProfitStatement(c);
     void DrawBooster(Canvas c)
     {
         Run g = Game!;
@@ -606,7 +594,7 @@ public sealed partial class GameApp
         c.Button(left + 19, 29, "B BACK", "shopBack");
         c.Button(left + 34, 29, "SPACE LEAVE SHOP", "next");
         if (!g.Tutorial) c.Button(c.Width - 16, 28, $"R ${g.ShopRerollCost}", "shopReroll");
-        c.Text(3, 31, g.Message, ConsoleColor.Yellow);
+        c.Text(3, 33, g.Message, ConsoleColor.Yellow);
         Footer(c, "WASD/1-6: Select | ENTER: Buy | R: Reroll | SPACE: Next month");
     }
     void DrawReward(Canvas c)

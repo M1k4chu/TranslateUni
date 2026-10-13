@@ -1,3 +1,18 @@
+# TranslateUni v5.6
+
+Run StartGame.cmd. All previous gameplay, fullscreen, shop, loan and input-queue fixes are included.
+
+The palette is slightly brighter and more colorful. The controls row and messages have moved down two rows, and the statistics panel is two rows lower again. The minimum playable terminal is now 108x42: controls at row 32, messages at 33, stat changes at 34, bars at 36-38, labels at 39, amounts at 40 and the bottom divider at 41.
+
+The monthly result is now a receipt-style calculation with numbered entries and exact amounts: sales quantity multiplied by price, per-sale boosts, production cost, unit-cost improvements, supplier/event effects, carbon charges, office overhead, overhead savings, individual decision expenses, event grants, debt event charges, stock holding costs and passive income. Zero optional entries are omitted. The total reconciles exactly with the reported profit, including a rounding entry when needed. The breakdown is captured before monthly inventory is deducted, so returning to a report cannot change its calculation. Loan principal and the $200 clear reward remain separate from operating profit.
+
+Result lines print one by one, followed by the total and profit quota. Long statements have pages; PgUp/PgDn print the previous or next page. Actual values for every quota appear below the receipt. A loan bridge is identified separately when it covered a profit shortfall.
+
+Changed statistics count toward their new values and briefly pulse. Each animation takes 300ms and works for decisions, events, purchases, loans, repayments and month transitions. Statistics also animate alongside the result printing. Animations only change the display, never the game state. Queued input is cleared after feedback finishes.
+
+Validation: Release build without warnings; 6403 passing checks, including 180 full campaigns, reconciled statements across every course, captured inventory, actual expense/event lines, stat animation endpoints, increase/decrease direction, one-time feedback, result printing and multi-page statements. Native Windows input and palette checks also passed. Rendered result, printing and shop previews were inspected at 108x42.
+
+---
 # TranslateUni v5.5
 
 Run StartGame.cmd. This update includes all previous game content and loan rules.
